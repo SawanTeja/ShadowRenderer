@@ -12,10 +12,11 @@ struct PhysicsObject {
     float mass;
     float friction; // 0.0 to 1.0, where 1.0 is high friction
     bool isStatic;
+    Vector3 size; // Half-extents for AABB (x, y, z)
 
     PhysicsObject() 
         : position(0,0,0), velocity(0,0,0), acceleration(0,0,0), 
-          mass(1.0f), friction(5.0f), isStatic(false) {}
+          mass(1.0f), friction(5.0f), isStatic(false), size(0.5f, 0.5f, 0.5f) {}
 };
 
 class PhysicsEngine {
@@ -34,6 +35,9 @@ public:
 
 private:
     std::vector<PhysicsObject*> objects;
+    
+    void checkCollisions(float dt);
+    void resolveCollision(PhysicsObject* a, PhysicsObject* b);
 };
 
 #endif // PHYSICS_ENGINE_H
