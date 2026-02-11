@@ -6,369 +6,16 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-Scene::Scene() : rotation(0.0f), lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0),
-                 cameraYaw(0.0f), cameraPitch(0.5f), cameraDistance(10.0f) {
-    // Default light color: warm white
-    light.color = Vector3(1.0f, 0.9f, 0.7f);
-    light.position = Vector3(0.0f, 5.0f, 0.0f);
-}
+// ==========================================
+// Shape Implementations
+// ==========================================
 
-Scene::~Scene() {
-}
-
-GLuint Scene::loadTexture(const char* filename) {
-    int width, height, nrChannels;
-    unsigned char *data = stbi_load(filename, &width, &height, &nrChannels, 0);
-    if (data) {
-        GLuint textureId;
-        glGenTextures(1, &textureId);
-        glBindTexture(GL_TEXTURE_2D, textureId);
-        
-        // Set texture wrapping to GL_REPEAT (usually basic for floors/walls)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        // Set texture filtering parameters
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        int format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        
-        stbi_image_free(data);
-        std::cout << "Successfully loaded texture: " << filename << std::endl;
-        return textureId;
-    } else {
-        std::cout << "Failed to load texture: " << filename << std::endl;
-        return 0;
-    }
-}
-
-void Scene::init() {
-    std::cout << "Scene::init() called" << std::endl;
-    const GLubyte* renderer = glGetString(GL_RENDERER);
-    const GLubyte* version = glGetString(GL_VERSION);
-    std::cout << "Renderer: " << (renderer ? (const char*)renderer : "Unknown") << std::endl;
-    std::cout << "OpenGL Version: " << (version ? (const char*)version : "Unknown") << std::endl;
-
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0);
-    glEnable(GL_COLOR_MATERIAL);
-    glEnable(GL_NORMALIZE);
-    
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-
-    // Load textures
-    floorTextureId = loadTexture("textures/floor_texture.jpg");
-    wallTextureId = loadTexture("textures/wall.jpg");
-
-    // Add a default cube - Blue
-    addCube(0.0f, 0.0f, 1.0f);
-    
-    // Activate the default light
-    lightActive = true;
-}
-
-void Scene::resize(int width, int height) {
-    if (height == 0) height = 1;
-    glViewport(0, 0, width, height);
-    
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    MathGL::perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
-    
-    glMatrixMode(GL_MODELVIEW);
-}
-
-void Scene::render() {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    glLoadIdentity();
-    
-    float camX = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
-    float camY = cameraDistance * sin(cameraPitch);
-    float camZ = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
-    
-    MathGL::lookAt(camX, camY, camZ, 
-              0.0f, 0.0f, 0.0f,
-              0.0f, 1.0f, 0.0f);
-              
-    // Set up the single light
-    if (lightActive) {
-        glEnable(GL_LIGHT0);
-        GLfloat light_position[] = { light.position.x, light.position.y, light.position.z, 1.0f };
-        GLfloat light_diffuse[] = { light.color.x, light.color.y, light.color.z, 1.0f };
-        glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-    }
-    
-    // ---- Step 1: Draw the floor (with texture if avail) AND mark it in stencil (stencil = 1) ----
-    glEnable(GL_STENCIL_TEST);
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-    drawFloor();
-    glDisable(GL_STENCIL_TEST);
-    
-    // Draw wall (with texture if avail) and cubes (no stencil writes)
-    drawWall();
-    for (const auto& cube : cubes) {
-        drawCube(cube);
-    }
-    
-        // ---- Step 2: Draw shadows using two-pass stencil technique ----
-        // Pass 1: Project shadow geometry into stencil only (no color/depth writes).
-        // Pass 2: Draw one floor quad with shadow color where stencil was marked.
-        // This gives correct shadow shapes AND zero fringes.
-        if (lightActive) {
-            const float wallZ = -5.0f;
-            bool lightInFront = (light.position.z > wallZ);
-            
-            // --- Pass 1: write shadow shape into stencil ---
-            glEnable(GL_STENCIL_TEST);
-            glStencilFunc(GL_EQUAL, 1, 0xFF);        // Only on floor (stencil==1)
-            glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);  // Mark shadow pixels as 2
-            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // No color output
-            glDepthMask(GL_FALSE);                    // No depth writes
-            
-            // Use polygon offset to resolve z-fighting with the floor
-            glEnable(GL_POLYGON_OFFSET_FILL);
-            glPolygonOffset(-1.0f, -1.0f);
-
-            glPushMatrix();
-            // Project to exactly y=0.0f (no manual offset)
-            Matrix4 shadowMat = Matrix4::shadow(light.position, 0.0f);
-            glMultMatrixf(shadowMat.data());
-            
-            for (const auto& cube : cubes) {
-                bool cubeInFront = (cube.position.z > wallZ);
-                if (lightInFront != cubeInFront) continue;
-                
-                glPushMatrix();
-                glTranslatef(cube.position.x, cube.position.y, cube.position.z);
-                float s = cube.size;
-                
-                glBegin(GL_QUADS);
-                    glVertex3f(-s, -s,  s); glVertex3f( s, -s,  s); glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
-                    glVertex3f(-s, -s, -s); glVertex3f(-s,  s, -s); glVertex3f( s,  s, -s); glVertex3f( s, -s, -s);
-                    glVertex3f(-s,  s, -s); glVertex3f(-s,  s,  s); glVertex3f( s,  s,  s); glVertex3f( s,  s, -s);
-                    glVertex3f(-s, -s, -s); glVertex3f( s, -s, -s); glVertex3f( s, -s,  s); glVertex3f(-s, -s,  s);
-                    glVertex3f( s, -s, -s); glVertex3f( s,  s, -s); glVertex3f( s,  s,  s); glVertex3f( s, -s,  s);
-                    glVertex3f(-s, -s, -s); glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s); glVertex3f(-s,  s, -s);
-                glEnd();
-                glPopMatrix();
-            }
-            glPopMatrix();
-            
-            // --- Pass 2: draw ONE quad with shadow color where stencil == 2 ---
-            glStencilFunc(GL_EQUAL, 2, 0xFF);
-            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-            
-            glDisable(GL_LIGHTING);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
-            
-            // Draw quad exactly at y=0.0f, relying on polygon offset
-            glBegin(GL_QUADS);
-                glVertex3f(-10.0f, 0.0f, 10.0f);
-                glVertex3f( 10.0f, 0.0f, 10.0f);
-                glVertex3f( 10.0f, 0.0f, -10.0f);
-                glVertex3f(-10.0f, 0.0f, -10.0f);
-            glEnd();
-            
-            glDisable(GL_POLYGON_OFFSET_FILL);
-            glDisable(GL_BLEND);
-            glDepthMask(GL_TRUE);
-            glDisable(GL_STENCIL_TEST);
-            glEnable(GL_LIGHTING);
-        
-        // Draw light source indicator (small yellow cube)
-        glPushMatrix();
-        glTranslatef(light.position.x, light.position.y, light.position.z);
-        glDisable(GL_LIGHTING);
-        glColor3f(light.color.x, light.color.y, light.color.z); 
-        
-        float ls = 0.15f;
-        glBegin(GL_QUADS);
-            // Front
-            glVertex3f(-ls, -ls, ls); glVertex3f(ls, -ls, ls); glVertex3f(ls, ls, ls); glVertex3f(-ls, ls, ls);
-            // Back
-            glVertex3f(-ls, -ls, -ls); glVertex3f(-ls, ls, -ls); glVertex3f(ls, ls, -ls); glVertex3f(ls, -ls, -ls);
-            // Top
-            glVertex3f(-ls, ls, -ls); glVertex3f(-ls, ls, ls); glVertex3f(ls, ls, ls); glVertex3f(ls, ls, -ls);
-             // Bottom
-            glVertex3f(-ls, -ls, -ls); glVertex3f(ls, -ls, -ls); glVertex3f(ls, -ls, ls); glVertex3f(-ls, -ls, ls);
-             // Right
-            glVertex3f(ls, -ls, -ls); glVertex3f(ls, ls, -ls); glVertex3f(ls, ls, ls); glVertex3f(ls, -ls, ls);
-             // Left
-            glVertex3f(-ls, -ls, -ls); glVertex3f(-ls, -ls, ls); glVertex3f(-ls, ls, ls); glVertex3f(-ls, ls, -ls);
-        glEnd();
-        glEnable(GL_LIGHTING);
-        glPopMatrix();
-    }
-
-    // Draw selection highlight wireframe
-    if (selectedIndex >= 0) {
-        glDisable(GL_LIGHTING);
-        glDisable(GL_DEPTH_TEST);
-        glColor3f(1.0f, 1.0f, 0.0f); // Bright yellow
-        glLineWidth(2.5f);
-
-        if (selectedIndex < (int)cubes.size()) {
-            // Highlight a cube
-            const Cube& c = cubes[selectedIndex];
-            drawCubeWireframe(c.position, c.size);
-        } else if (selectedIndex == (int)cubes.size() && lightActive) {
-            // Highlight the light
-            drawCubeWireframe(light.position, 0.15f);
-        }
-
-        glLineWidth(1.0f);
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_LIGHTING);
-    }
-}
-
-void Scene::addCube(float r, float g, float b) {
-    Cube c;
-    c.position.x = (rand() % 100) / 10.0f - 5.0f;
-    c.position.y = 0.5f;
-    c.position.z = (rand() % 100) / 10.0f - 5.0f;
-    
-    c.color.x = r;
-    c.color.y = g;
-    c.color.z = b;
-    
-    c.size = 0.5f;
-    
-    cubes.push_back(c);
-}
-
-void Scene::addCubeAt(float x, float z, float r, float g, float b) {
-    Cube c;
-    c.position.x = x;
-    c.position.y = 0.5f;
-    c.position.z = z;
-    
-    c.color.x = r;
-    c.color.y = g;
-    c.color.z = b;
-    
-    c.size = 0.5f;
-    
-    cubes.push_back(c);
-}
-
-void Scene::rotateCamera(float dx, float dy) {
-    cameraYaw += dx;
-    cameraPitch += dy;
-    
-    // Clamp pitch to avoid flipping
-    if (cameraPitch < 0.1f) cameraPitch = 0.1f;
-    if (cameraPitch > 1.5f) cameraPitch = 1.5f; // Slightly less than PI/2
-}
-
-void Scene::zoomCamera(float delta) {
-    cameraDistance -= delta;
-    if (cameraDistance < 2.0f) cameraDistance = 2.0f;
-    if (cameraDistance > 50.0f) cameraDistance = 50.0f;
-}
-
-void Scene::getCameraPosition(float& x, float& y, float& z) const {
-    x = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
-    y = cameraDistance * sin(cameraPitch);
-    z = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
-}
-
-void Scene::setLightWorldPos(float x, float y, float z) {
-    light.position.x = x;
-    light.position.y = y;
-    light.position.z = z;
-    lightActive = true;
-}
-
-Vector3 Scene::getLightPosition() const {
-    return light.position;
-}
-
-bool Scene::hasLight() const {
-    return lightActive;
-}
-
-// ---------- Picking & selection ----------
-
-int Scene::pickObject(float screenX, float screenY, int vpW, int vpH) {
-    float origin[3], dir[3];
-    
-    float camX = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
-    float camY = cameraDistance * sin(cameraPitch);
-    float camZ = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
-
-    buildScreenRay(screenX, screenY, vpW, vpH, camX, camY, camZ, origin, dir);
-
-    int bestIdx = -1;
-    float bestT = 1e30f;
-
-    // Test each cube
-    for (int i = 0; i < (int)cubes.size(); i++) {
-        const Cube& c = cubes[i];
-        float s = c.size;
-        float t;
-        if (rayIntersectsAABB(origin, dir,
-                              c.position.x - s, c.position.y - s, c.position.z - s,
-                              c.position.x + s, c.position.y + s, c.position.z + s, t)) {
-            if (t < bestT) { bestT = t; bestIdx = i; }
-        }
-    }
-
-    // Test the light indicator (small cube around light position)
-    if (lightActive) {
-        float ls = 0.15f;
-        float t;
-        if (rayIntersectsAABB(origin, dir,
-                              light.position.x - ls, light.position.y - ls, light.position.z - ls,
-                              light.position.x + ls, light.position.y + ls, light.position.z + ls, t)) {
-            if (t < bestT) { bestT = t; bestIdx = (int)cubes.size(); }
-        }
-    }
-
-    return bestIdx;
-}
-
-void Scene::setSelected(int index) {
-    selectedIndex = index;
-}
-
-int Scene::getSelected() const {
-    return selectedIndex;
-}
-
-void Scene::moveCube(int index, float x, float z) {
-    if (index >= 0 && index < (int)cubes.size()) {
-        cubes[index].position.x = x;
-        cubes[index].position.z = z;
-    }
-}
-
-int Scene::cubeCount() const {
-    return (int)cubes.size();
-}
-
-Vector3 Scene::getCubePosition(int index) const {
-    if (index >= 0 && index < (int)cubes.size()) {
-        return cubes[index].position;
-    }
-    return Vector3();
-}
-
-// ---------- Drawing helpers ----------
-
-void Scene::drawCube(const Cube& cube) {
+// --- Cube ---
+void Cube::draw() const {
     glPushMatrix();
-    glTranslatef(cube.position.x, cube.position.y, cube.position.z);
-    
-    glColor3f(cube.color.x, cube.color.y, cube.color.z);
-    float s = cube.size;
+    glTranslatef(position.x, position.y, position.z);
+    glColor3f(color.x, color.y, color.z);
+    float s = size;
     
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 0.0f, 1.0f);
@@ -389,47 +36,599 @@ void Scene::drawCube(const Cube& cube) {
         glNormal3f(-1.0f, 0.0f, 0.0f);
         glVertex3f(-s, -s, -s); glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s); glVertex3f(-s,  s, -s);
     glEnd();
-    
     glPopMatrix();
 }
 
-void Scene::drawCubeWireframe(const Vector3& pos, float size) {
-    float s = size * 1.02f; // Slightly larger to avoid z-fighting
+void Cube::drawWireframe() const {
+    float s = size * 1.02f;
     glPushMatrix();
-    glTranslatef(pos.x, pos.y, pos.z);
-
+    glTranslatef(position.x, position.y, position.z);
+    
     glBegin(GL_LINE_STRIP);
-        // Bottom face
         glVertex3f(-s, -s, -s); glVertex3f( s, -s, -s);
         glVertex3f( s, -s,  s); glVertex3f(-s, -s,  s);
         glVertex3f(-s, -s, -s);
     glEnd();
     glBegin(GL_LINE_STRIP);
-        // Top face
         glVertex3f(-s,  s, -s); glVertex3f( s,  s, -s);
         glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
         glVertex3f(-s,  s, -s);
     glEnd();
     glBegin(GL_LINES);
-        // Vertical edges
         glVertex3f(-s, -s, -s); glVertex3f(-s,  s, -s);
         glVertex3f( s, -s, -s); glVertex3f( s,  s, -s);
         glVertex3f( s, -s,  s); glVertex3f( s,  s,  s);
         glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s);
     glEnd();
-
     glPopMatrix();
+}
+
+float Cube::intersect(const float origin[3], const float dir[3]) const {
+    float t = -1.0f;
+    float s = size;
+    // Utilize the existing AABB test
+    if (rayIntersectsAABB(origin, dir, 
+                                  position.x - s, position.y - s, position.z - s,
+                                  position.x + s, position.y + s, position.z + s, t)) {
+        return t;
+    }
+    return -1.0f;
+}
+
+// --- Sphere ---
+void Sphere::draw() const {
+    glPushMatrix();
+    glTranslatef(position.x, position.y, position.z);
+    glColor3f(color.x, color.y, color.z);
+    
+    // Manual UV Sphere
+    float radius = size;
+    int latSegments = 20;
+    int lonSegments = 20;
+    
+    for (int i = 0; i < latSegments; ++i) {
+        float lat0 = M_PI * (-0.5 + (float)(i) / latSegments);
+        float z0  = radius * sin(lat0);
+        float zr0 = radius * cos(lat0);
+        
+        float lat1 = M_PI * (-0.5 + (float)(i+1) / latSegments);
+        float z1 = radius * sin(lat1);
+        float zr1 = radius * cos(lat1);
+        
+        glBegin(GL_QUAD_STRIP);
+        for (int j = 0; j <= lonSegments; ++j) {
+            float lng = 2 * M_PI * (float)(j - 1) / lonSegments;
+            float x = cos(lng);
+            float y = sin(lng);
+            
+            glNormal3f(x * zr0, z0, y * zr0);
+            
+            // Re-calc for Y-up
+            float v0 = (float)i / latSegments;
+            float v1 = (float)(i+1) / latSegments;
+            float th0 = v0 * M_PI - M_PI/2;
+            float th1 = v1 * M_PI - M_PI/2;
+            
+            float y0 = radius * sin(th0);
+            float r0 = radius * cos(th0);
+            
+            float y1 = radius * sin(th1);
+            float r1 = radius * cos(th1);
+            
+            float u = (float)j / lonSegments;
+            float phi = u * 2 * M_PI;
+            
+            float x0 = r0 * sin(phi);
+            float z0_val = r0 * cos(phi);
+            
+            float x1 = r1 * sin(phi);
+            float z1_val = r1 * cos(phi);
+            
+            glNormal3f(x0/radius, y0/radius, z0_val/radius);
+            glVertex3f(x0, y0, z0_val);
+            
+            glNormal3f(x1/radius, y1/radius, z1_val/radius);
+            glVertex3f(x1, y1, z1_val);
+        }
+        glEnd();
+    }
+    glPopMatrix();
+}
+
+void Sphere::drawWireframe() const {
+    glPushMatrix();
+    glTranslatef(position.x, position.y, position.z);
+    
+    // Draw 3 circles
+    float r = size * 1.05f;
+    int segs = 32;
+    
+    glBegin(GL_LINE_LOOP); // XY plane
+    for(int i=0; i<segs; i++) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(cos(a)*r, sin(a)*r, 0);
+    }
+    glEnd();
+    
+    glBegin(GL_LINE_LOOP); // XZ plane
+    for(int i=0; i<segs; i++) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(cos(a)*r, 0, sin(a)*r);
+    }
+    glEnd();
+    
+    glBegin(GL_LINE_LOOP); // YZ plane
+    for(int i=0; i<segs; i++) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(0, cos(a)*r, sin(a)*r);
+    }
+    glEnd();
+    
+    glPopMatrix();
+}
+
+float Sphere::intersect(const float origin[3], const float dir[3]) const {
+    // AABB approximation for now
+    float t = -1.0f;
+    if (rayIntersectsAABB(origin, dir, 
+                                  position.x - size, position.y - size, position.z - size,
+                                  position.x + size, position.y + size, position.z + size, t)) {
+        return t;
+    }
+    return -1.0f;
+}
+
+// --- Cylinder ---
+void Cylinder::draw() const {
+    glPushMatrix();
+    glTranslatef(position.x, position.y, position.z);
+    glColor3f(color.x, color.y, color.z);
+    
+    float h = size * 2.0f; // Height
+    float r = size;        // Radius
+    int segs = 32;
+    
+    // Top Cap
+    glBegin(GL_TRIANGLE_FAN);
+    glNormal3f(0, 1, 0);
+    glVertex3f(0, h/2, 0);
+    for(int i=0; i<=segs; i++) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(sin(a)*r, h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    // Bottom Cap
+    glBegin(GL_TRIANGLE_FAN);
+    glNormal3f(0, -1, 0);
+    glVertex3f(0, -h/2, 0);
+    for(int i=segs; i>=0; i--) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(sin(a)*r, -h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    // Sides
+    glBegin(GL_QUAD_STRIP);
+    for(int i=0; i<=segs; i++) {
+        float a = 2*M_PI*i/segs;
+        float x = sin(a);
+        float z = cos(a);
+        
+        glNormal3f(x, 0, z);
+        glVertex3f(x*r, h/2, z*r);
+        glVertex3f(x*r, -h/2, z*r);
+    }
+    glEnd();
+    
+    glPopMatrix();
+}
+
+void Cylinder::drawWireframe() const {
+    glPushMatrix();
+    glTranslatef(position.x, position.y, position.z);
+    float h = size * 2.0f * 1.02f;
+    float r = size * 1.02f;
+    int segs = 32;
+    
+    glBegin(GL_LINE_LOOP);
+    for(int i=0; i<segs; i++) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(sin(a)*r, h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    glBegin(GL_LINE_LOOP);
+    for(int i=0; i<segs; i++) {
+        float a = 2*M_PI*i/segs;
+        glVertex3f(sin(a)*r, -h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    glBegin(GL_LINES);
+    glVertex3f(r, h/2, 0); glVertex3f(r, -h/2, 0);
+    glVertex3f(-r, h/2, 0); glVertex3f(-r, -h/2, 0);
+    glVertex3f(0, h/2, r); glVertex3f(0, -h/2, r);
+    glVertex3f(0, h/2, -r); glVertex3f(0, -h/2, -r);
+    glEnd();
+    
+    glPopMatrix();
+}
+
+float Cylinder::intersect(const float origin[3], const float dir[3]) const {
+    // AABB approximation
+    float h = size * 2.0f;
+    float t = -1.0f;
+    if (rayIntersectsAABB(origin, dir, 
+                                  position.x - size, position.y - size, position.z - size,
+                                  position.x + size, position.y + size, position.z + size, t)) {
+        return t;
+    }
+    return -1.0f;
+}
+
+// --- Cone ---
+void Cone::draw() const {
+    glPushMatrix();
+    glTranslatef(position.x, position.y, position.z);
+    glColor3f(color.x, color.y, color.z);
+    
+    float h = size * 2.0f;
+    float r = size;
+    
+    // Bottom Cap
+    glBegin(GL_TRIANGLE_FAN);
+    glNormal3f(0, -1, 0);
+    glVertex3f(0, -h/2, 0);
+    for(int i=segments; i>=0; i--) {
+        float a = 2*M_PI*i/segments;
+        glVertex3f(sin(a)*r, -h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    // Sides
+    glBegin(GL_TRIANGLE_FAN);
+    glNormal3f(0, 1, 0); // Approx normal for tip
+    glVertex3f(0, h/2, 0);
+    for(int i=0; i<=segments; i++) {
+        float a = 2*M_PI*i/segments;
+        float x = sin(a);
+        float z = cos(a);
+        
+        // Calculate normal for side
+        // slope is h/r
+        float ny = r/h; 
+        float nx = x;
+        float nz = z;
+        // Normalize
+        float len = sqrt(nx*nx + ny*ny + nz*nz);
+        glNormal3f(nx/len, ny/len, nz/len);
+        
+        glVertex3f(x*r, -h/2, z*r);
+    }
+    glEnd();
+    
+    glPopMatrix();
+}
+
+void Cone::drawWireframe() const {
+    glPushMatrix();
+    glTranslatef(position.x, position.y, position.z);
+    float h = size * 2.0f * 1.02f;
+    float r = size * 1.02f;
+    
+    glBegin(GL_LINE_LOOP);
+    for(int i=0; i<segments; i++) {
+        float a = 2*M_PI*i/segments;
+        glVertex3f(sin(a)*r, -h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    glBegin(GL_LINES);
+    for(int i=0; i<segments; i++) {
+         float a = 2*M_PI*i/segments;
+         glVertex3f(0, h/2, 0);
+         glVertex3f(sin(a)*r, -h/2, cos(a)*r);
+    }
+    glEnd();
+    
+    glPopMatrix();
+}
+
+float Cone::intersect(const float origin[3], const float dir[3]) const {
+     // AABB approximation
+    float t = -1.0f;
+    if (rayIntersectsAABB(origin, dir, 
+                                  position.x - size, position.y - size, position.z - size,
+                                  position.x + size, position.y + size, position.z + size, t)) {
+        return t;
+    }
+    return -1.0f;
+}
+
+// ==========================================
+// Scene Implementation
+// ==========================================
+
+Scene::Scene() : lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0),
+                 cameraYaw(0.0f), cameraPitch(0.5f), cameraDistance(10.0f) {
+    // Default light
+    light.color = Vector3(1.0f, 0.9f, 0.7f);
+    light.position = Vector3(0.0f, 5.0f, 0.0f);
+}
+
+Scene::~Scene() {
+    for(auto s : shapes) delete s;
+    shapes.clear();
+}
+
+GLuint Scene::loadTexture(const char* filename) {
+    int width, height, nrChannels;
+    unsigned char *data = stbi_load(filename, &width, &height, &nrChannels, 0);
+    if (data) {
+        GLuint textureId;
+        glGenTextures(1, &textureId);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        int format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+        return textureId;
+    }
+    return 0;
+}
+
+void Scene::init() {
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_COLOR_MATERIAL);
+    glEnable(GL_NORMALIZE);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+    floorTextureId = loadTexture("textures/floor_texture.jpg");
+    wallTextureId = loadTexture("textures/wall.jpg");
+
+    // Add some default shapes
+    addShape(SHAPE_CUBE, 0.0f, 0.0f, 1.0f);
+    lightActive = true;
+}
+
+void Scene::resize(int width, int height) {
+    if (height == 0) height = 1;
+    glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    MathGL::perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    glMatrixMode(GL_MODELVIEW);
+}
+
+void Scene::render() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glLoadIdentity();
+    
+    float camX = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    float camY = cameraDistance * sin(cameraPitch);
+    float camZ = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+    
+    MathGL::lookAt(camX, camY, camZ, 
+              0.0f, 0.0f, 0.0f,
+              0.0f, 1.0f, 0.0f);
+              
+    if (lightActive) {
+        glEnable(GL_LIGHT0);
+        GLfloat light_position[] = { light.position.x, light.position.y, light.position.z, 1.0f };
+        GLfloat light_diffuse[] = { light.color.x, light.color.y, light.color.z, 1.0f };
+        glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
+    }
+    
+    // Draw Floor with Stencil
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    drawFloor();
+    glDisable(GL_STENCIL_TEST);
+    
+    drawWall();
+    
+    // Draw all shapes
+    for (auto shape : shapes) {
+        shape->draw();
+    }
+    
+    // Shadows
+    if (lightActive) {
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_EQUAL, 1, 0xFF); // Only on floor
+        glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        glDepthMask(GL_FALSE);
+        
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(-1.0f, -1.0f);
+
+        glPushMatrix();
+        Matrix4 shadowMat = Matrix4::shadow(light.position, 0.0f);
+        glMultMatrixf(shadowMat.data());
+        
+        for (auto shape : shapes) {
+             // Simple check if light is in front of object relative to wall "could" be done, but
+             // generic shadow volume is robust. Here we are using projection.
+             // We just project everything.
+             shape->draw();
+        }
+        glPopMatrix();
+        
+        // Draw Shadow Color
+        glStencilFunc(GL_EQUAL, 2, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        
+        glDisable(GL_LIGHTING);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
+        
+        glBegin(GL_QUADS);
+            glVertex3f(-100.0f, 0.0f, 100.0f);
+            glVertex3f( 100.0f, 0.0f, 100.0f);
+            glVertex3f( 100.0f, 0.0f, -100.0f);
+            glVertex3f(-100.0f, 0.0f, -100.0f);
+        glEnd();
+        
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_STENCIL_TEST);
+        glEnable(GL_LIGHTING);
+        
+        // Draw Light
+        glPushMatrix();
+        glTranslatef(light.position.x, light.position.y, light.position.z);
+        glDisable(GL_LIGHTING);
+        glColor3f(light.color.x, light.color.y, light.color.z); 
+        drawLightWireframe(Vector3(0,0,0), 0.15f); // Local coords
+        glEnable(GL_LIGHTING);
+        glPopMatrix();
+    }
+
+    // Selection Highlight
+    if (selectedIndex >= 0) {
+        glDisable(GL_LIGHTING);
+        glDisable(GL_DEPTH_TEST);
+        glColor3f(1.0f, 1.0f, 0.0f);
+        glLineWidth(2.5f);
+
+        if (selectedIndex < (int)shapes.size()) {
+            shapes[selectedIndex]->drawWireframe();
+        } else if (selectedIndex == (int)shapes.size() && lightActive) {
+            drawLightWireframe(light.position, 0.15f);
+        }
+
+        glLineWidth(1.0f);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_LIGHTING);
+    }
+}
+
+void Scene::addShape(ShapeType type, float r, float g, float b) {
+    float x = (rand() % 100) / 10.0f - 5.0f;
+    float z = (rand() % 100) / 10.0f - 5.0f;
+    addShapeAt(type, x, z, r, g, b);
+}
+
+void Scene::addShapeAt(ShapeType type, float x, float z, float r, float g, float b) {
+    Vector3 pos(x, 0.5f, z);
+    Vector3 col(r, g, b);
+    float size = 0.5f;
+
+    Shape* newShape = nullptr;
+    switch(type) {
+        case SHAPE_CUBE: newShape = new Cube(pos, col, size); break;
+        case SHAPE_SPHERE: newShape = new Sphere(pos, col, size); break;
+        case SHAPE_CYLINDER: newShape = new Cylinder(pos, col, size); break;
+        case SHAPE_CONE: newShape = new Cone(pos, col, size, 32); break;
+        case SHAPE_TRICONE: newShape = new Cone(pos, col, size, 3); break;
+    }
+    
+    if (newShape) {
+        shapes.push_back(newShape);
+    }
+}
+
+void Scene::rotateCamera(float dx, float dy) {
+    cameraYaw += dx;
+    cameraPitch += dy;
+    if (cameraPitch < 0.1f) cameraPitch = 0.1f;
+    if (cameraPitch > 1.5f) cameraPitch = 1.5f;
+}
+
+void Scene::zoomCamera(float delta) {
+    cameraDistance -= delta;
+    if (cameraDistance < 2.0f) cameraDistance = 2.0f;
+    if (cameraDistance > 50.0f) cameraDistance = 50.0f;
+}
+
+void Scene::getCameraPosition(float& x, float& y, float& z) const {
+    x = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    y = cameraDistance * sin(cameraPitch);
+    z = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+}
+
+void Scene::setLightWorldPos(float x, float y, float z) {
+    light.position = Vector3(x, y, z);
+    lightActive = true;
+}
+
+Vector3 Scene::getLightPosition() const { return light.position; }
+bool Scene::hasLight() const { return lightActive; }
+
+int Scene::pickObject(float screenX, float screenY, int vpW, int vpH) {
+    float origin[3], dir[3];
+    float camX = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    float camY = cameraDistance * sin(cameraPitch);
+    float camZ = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+    
+    buildScreenRay(screenX, screenY, vpW, vpH, camX, camY, camZ, origin, dir);
+
+    int bestIdx = -1;
+    float bestT = 1e30f;
+
+    for (int i = 0; i < (int)shapes.size(); i++) {
+        float t = shapes[i]->intersect(origin, dir);
+        if (t > 0 && t < bestT) {
+            bestT = t;
+            bestIdx = i;
+        }
+    }
+
+    // Light picking
+    if (lightActive) {
+        float ls = 0.15f;
+        float t;
+        if (rayIntersectsAABB(origin, dir,
+                                      light.position.x - ls, light.position.y - ls, light.position.z - ls,
+                                      light.position.x + ls, light.position.y + ls, light.position.z + ls, t)) {
+            if (t < bestT) {
+                bestIdx = (int)shapes.size();
+            }
+        }
+    }
+
+    return bestIdx;
+}
+
+void Scene::setSelected(int index) { selectedIndex = index; }
+int Scene::getSelected() const { return selectedIndex; }
+
+void Scene::moveShape(int index, float x, float z) {
+    if (index >= 0 && index < (int)shapes.size()) {
+        shapes[index]->position.x = x;
+        shapes[index]->position.z = z;
+    }
+}
+
+int Scene::shapeCount() const { return (int)shapes.size(); }
+
+Vector3 Scene::getShapePosition(int index) const {
+    if (index >= 0 && index < (int)shapes.size()) {
+        return shapes[index]->position;
+    }
+    return Vector3();
 }
 
 void Scene::drawFloor() {
     if (floorTextureId != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, floorTextureId);
-        glColor3f(1.0f, 1.0f, 1.0f); // White so texture shows correctly
+        glColor3f(1.0f, 1.0f, 1.0f);
     } else {
         glColor3f(0.5f, 0.5f, 0.5f);
     }
-
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 1.0f, 0.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, 0.0f, 10.0f);
@@ -437,21 +636,17 @@ void Scene::drawFloor() {
         glTexCoord2f(1.0f, 1.0f); glVertex3f( 10.0f, 0.0f, -10.0f);
         glTexCoord2f(0.0f, 1.0f); glVertex3f(-10.0f, 0.0f, -10.0f);
     glEnd();
-
-    if (floorTextureId != 0) {
-        glDisable(GL_TEXTURE_2D);
-    }
+    if (floorTextureId != 0) glDisable(GL_TEXTURE_2D);
 }
 
 void Scene::drawWall() {
     if (wallTextureId != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, wallTextureId);
-        glColor3f(1.0f, 1.0f, 1.0f); // White so texture shows correctly
+        glColor3f(1.0f, 1.0f, 1.0f);
     } else {
         glColor3f(0.7f, 0.7f, 0.7f);
     }
-
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 0.0f, 1.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, 0.0f, -5.0f);
@@ -459,8 +654,26 @@ void Scene::drawWall() {
         glTexCoord2f(1.0f, 1.0f); glVertex3f( 10.0f, 10.0f, -5.0f);
         glTexCoord2f(0.0f, 1.0f); glVertex3f(-10.0f, 10.0f, -5.0f);
     glEnd();
+    if (wallTextureId != 0) glDisable(GL_TEXTURE_2D);
+}
 
-    if (wallTextureId != 0) {
-        glDisable(GL_TEXTURE_2D);
-    }
+void Scene::drawLightWireframe(const Vector3& pos, float size) {
+    // Reuse Cube::drawWireframe logic or custom small cube
+    float ls = size;
+    glPushMatrix();
+    glTranslatef(pos.x, pos.y, pos.z);
+    
+    glBegin(GL_LINE_STRIP);
+        glVertex3f(-ls, -ls, ls); glVertex3f(ls, -ls, ls); glVertex3f(ls, ls, ls); glVertex3f(-ls, ls, ls); glVertex3f(-ls, -ls, ls);
+    glEnd();
+    glBegin(GL_LINE_STRIP);
+        glVertex3f(-ls, -ls, -ls); glVertex3f(-ls, ls, -ls); glVertex3f(ls, ls, -ls); glVertex3f(ls, -ls, -ls); glVertex3f(-ls, -ls, -ls);
+    glEnd();
+    glBegin(GL_LINES);
+        glVertex3f(-ls, ls, -ls); glVertex3f(-ls, ls, ls);
+        glVertex3f(ls, ls, ls); glVertex3f(ls, ls, -ls);
+        glVertex3f(ls, -ls, -ls); glVertex3f(ls, -ls, ls);
+        glVertex3f(-ls, -ls, -ls); glVertex3f(-ls, -ls, ls);
+    glEnd();
+    glPopMatrix();
 }

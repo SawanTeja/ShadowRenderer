@@ -15,6 +15,8 @@ private:
     GtkWidget* window;
     GtkWidget* button;
     GtkWidget* mode_combo;
+    GtkWidget* shape_combo; // New
+
     GtkWidget* viewModeCheck;
     GtkWidget* color_button;
     GtkWidget* box;

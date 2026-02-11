@@ -5,10 +5,66 @@
 #include <GL/gl.h>
 #include "MathUtils.h"
 
-struct Cube {
+// Enum for Shape Type
+enum ShapeType {
+    SHAPE_CUBE,
+    SHAPE_SPHERE,
+    SHAPE_CYLINDER,
+    SHAPE_CONE,
+    SHAPE_TRICONE
+};
+
+// Abstract Base Class
+class Shape {
+public:
     Vector3 position;
     Vector3 color;
     float size;
+
+    Shape(const Vector3& pos, const Vector3& col, float s) 
+        : position(pos), color(col), size(s) {}
+    virtual ~Shape() {}
+
+    virtual void draw() const = 0;
+    virtual void drawWireframe() const = 0;
+    
+    // Returns t if hit, or -1 if no hit. origin and dir are in world space.
+    virtual float intersect(const float origin[3], const float dir[3]) const = 0;
+};
+
+class Cube : public Shape {
+public:
+    Cube(const Vector3& pos, const Vector3& col, float s) : Shape(pos, col, s) {}
+    void draw() const override;
+    void drawWireframe() const override;
+    float intersect(const float origin[3], const float dir[3]) const override;
+};
+
+class Sphere : public Shape {
+public:
+    Sphere(const Vector3& pos, const Vector3& col, float s) : Shape(pos, col, s) {}
+    void draw() const override;
+    void drawWireframe() const override;
+    float intersect(const float origin[3], const float dir[3]) const override;
+};
+
+class Cylinder : public Shape {
+public:
+    Cylinder(const Vector3& pos, const Vector3& col, float s) : Shape(pos, col, s) {}
+    void draw() const override;
+    void drawWireframe() const override;
+    float intersect(const float origin[3], const float dir[3]) const override;
+};
+
+// Cone / Tricone (depending on segments)
+class Cone : public Shape {
+public:
+    int segments; // 3 for Tricone, 20+ for Cone
+    Cone(const Vector3& pos, const Vector3& col, float s, int segs = 32) 
+        : Shape(pos, col, s), segments(segs) {}
+    void draw() const override;
+    void drawWireframe() const override;
+    float intersect(const float origin[3], const float dir[3]) const override;
 };
 
 class Scene {
@@ -20,8 +76,8 @@ public:
     void render();
     void resize(int width, int height);
 
-    void addCube(float r, float g, float b);
-    void addCubeAt(float x, float z, float r, float g, float b);
+    void addShape(ShapeType type, float r, float g, float b);
+    void addShapeAt(ShapeType type, float x, float z, float r, float g, float b);
 
     // Camera Control
     void rotateCamera(float dx, float dy);
@@ -34,15 +90,15 @@ public:
     bool hasLight() const;
 
     // Picking & selection
-    // Returns -1 = nothing, 0..N-1 = cube index, N = light
+    // Returns -1 = nothing, 0..N-1 = shape index, N = light
     int pickObject(float screenX, float screenY, int vpW, int vpH);
     void setSelected(int index);
     int  getSelected() const;
 
     // Move APIs
-    void moveCube(int index, float x, float z);
-    int  cubeCount() const;
-    Vector3 getCubePosition(int index) const;
+    void moveShape(int index, float x, float z);
+    int  shapeCount() const;
+    Vector3 getShapePosition(int index) const;
 
 private:
     struct Light {
@@ -50,10 +106,9 @@ private:
         Vector3 color;
     };
 
-    std::vector<Cube> cubes;
+    std::vector<Shape*> shapes;
     Light light;
     bool lightActive;
-    float rotation;
     
     // Camera State
     float cameraYaw;      // Horizontal rotation (radians)
@@ -62,10 +117,9 @@ private:
     
     int selectedIndex;  // -1 = none
     
-    void drawCube(const Cube& cube);
-    void drawCubeWireframe(const Vector3& pos, float size);
     void drawFloor();
     void drawWall();
+    void drawLightWireframe(const Vector3& pos, float size);
 
     GLuint floorTextureId;
     GLuint wallTextureId;
