@@ -19,6 +19,25 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()){
     GtkWidget* controlBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(box), controlBox, FALSE, FALSE, 10);
 
+    // Create Color Button
+    color_button = gtk_color_button_new();
+    GdkRGBA color;
+    gdk_rgba_parse(&color, "blue"); // Default Blue to match logic
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_button), &color);
+    gtk_box_pack_start(GTK_BOX(controlBox), color_button, FALSE, FALSE, 0);
+    
+    // Mode Combo
+    mode_combo = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(mode_combo), "Cube");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(mode_combo), "Light");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(mode_combo), 0);
+    gtk_box_pack_start(GTK_BOX(controlBox), mode_combo, FALSE, FALSE, 0);
+
+    // Create Add Light button
+    add_light_button = gtk_button_new_with_label("Add Light");
+    gtk_box_pack_start(GTK_BOX(controlBox), add_light_button, FALSE, FALSE, 0);
+    g_signal_connect(add_light_button, "clicked", G_CALLBACK(on_add_light_clicked), this);
+
     // Create a button
     button = gtk_button_new_with_label("Add Cube");
     gtk_box_pack_start(GTK_BOX(controlBox), button, TRUE, TRUE, 0);
@@ -30,6 +49,11 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()){
     gl_area = gtk_gl_area_new();
     gtk_widget_set_hexpand(gl_area, TRUE);
     gtk_widget_set_vexpand(gl_area, TRUE);
+    
+    // Request a depth buffer - CRITICAL for 3D
+    gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(gl_area), TRUE);
+    gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(gl_area), FALSE); // Not strictly needed for this shadow method but good practice to be explicit
+    
     gtk_box_pack_start(GTK_BOX(box), gl_area, TRUE, TRUE, 0);
     
     // Connect GL signals
@@ -53,7 +77,17 @@ void MainWindow::show() {
 
 void MainWindow::on_button_clicked(GtkWidget* widget, gpointer data) {
     MainWindow* mw = static_cast<MainWindow*>(data);
-    mw->scene->addCube();
+    
+    GdkRGBA color;
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(mw->color_button), &color);
+    
+    mw->scene->addCube(color.red, color.green, color.blue);
+    gtk_widget_queue_draw(mw->gl_area);
+}
+
+void MainWindow::on_add_light_clicked(GtkWidget* widget, gpointer data) {
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    mw->scene->addLight();
     gtk_widget_queue_draw(mw->gl_area);
 }
 
@@ -65,9 +99,10 @@ void MainWindow::on_realize(GtkGLArea* area, gpointer data) {
     mw->scene->init();
 }
 
-void MainWindow::on_render(GtkGLArea* area, GdkGLContext* context, gpointer data) {
+gboolean MainWindow::on_render(GtkGLArea* area, GdkGLContext* context, gpointer data) {
     MainWindow* mw = static_cast<MainWindow*>(data);
     mw->scene->render();
+    return TRUE;
 }
 
 gboolean MainWindow::on_resize(GtkGLArea* area, gint width, gint height, gpointer data) {
@@ -100,14 +135,35 @@ gboolean MainWindow::on_motion_notify(GtkWidget* widget, GdkEventMotion* event, 
 gboolean MainWindow::on_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data) {
     MainWindow* mw = static_cast<MainWindow*>(data);
     
-     int w = gtk_widget_get_allocated_width(widget);
+    int w = gtk_widget_get_allocated_width(widget);
     int h = gtk_widget_get_allocated_height(widget);
     
-    float x = (float)event->x / w;
-    float y = (float)event->y / h;
+    float screenX = (float)event->x / w;
+    float screenY = (float)event->y / h;
     
-    mw->scene->setLightPosition(x, y);
-    gtk_widget_queue_draw(mw->gl_area);
+    gchar* mode = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(mw->mode_combo));
+    bool isCube = (g_strcmp0(mode, "Cube") == 0);
+    g_free(mode);
+    
+    GdkRGBA color;
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(mw->color_button), &color);
+    
+    float worldX, worldZ;
+    
+    if (isCube) {
+        // Cubes sit on the floor (Y=0), so ray-cast to the floor plane
+        if (unprojectScreenToFloor(screenX, screenY, 0.0f, w, h, worldX, worldZ)) {
+            mw->scene->addCubeAt(worldX, worldZ, color.red, color.green, color.blue);
+            gtk_widget_queue_draw(mw->gl_area);
+        }
+    } else {
+        // Lights: ray-cast to a plane at Y=3.0 so the light appears
+        // visually at the exact screen position where the user clicked
+        if (unprojectScreenToFloor(screenX, screenY, 3.0f, w, h, worldX, worldZ)) {
+            mw->scene->addLightAt(worldX, worldZ, color.red, color.green, color.blue);
+            gtk_widget_queue_draw(mw->gl_area);
+        }
+    }
     
     return TRUE;
 }

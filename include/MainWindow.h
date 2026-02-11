@@ -14,16 +14,20 @@ public:
 private:
     GtkWidget* window;
     GtkWidget* button;
+    GtkWidget* add_light_button;
+    GtkWidget* mode_combo;
+    GtkWidget* color_button;
     GtkWidget* box;
     GtkWidget* gl_area;
 
     Scene* scene;
 
     static void on_button_clicked(GtkWidget* widget, gpointer data);
+    static void on_add_light_clicked(GtkWidget* widget, gpointer data);
     
     // GL Callbacks
     static void on_realize(GtkGLArea* area, gpointer data);
-    static void on_render(GtkGLArea* area, GdkGLContext* context, gpointer data);
+    static gboolean on_render(GtkGLArea* area, GdkGLContext* context, gpointer data);
     static gboolean on_resize(GtkGLArea* area, gint width, gint height, gpointer data);
     
     // Mouse interaction

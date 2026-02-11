@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(Basic)
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)

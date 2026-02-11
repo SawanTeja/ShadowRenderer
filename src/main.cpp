@@ -1,19 +1,19 @@
 #include <gtk/gtk.h>
+#include <cstdlib>
 #include "MainWindow.h"
 
 static void activate(GtkApplication* app, gpointer user_data) {
     auto* window = new MainWindow(app);
     window->show();
-    // In a real app we might want to manage the lifetime of MainWindow better, 
-    // but for this simple example, it's tied to the GTK window life via the application loop.
-    // Actually, `new` here leaks if not deleted.
-    // A better way is to manage it, but since `gtk_application_window_new` attaches to app, 
-    // when the window closes, the widget is destroyed. The C++ wrapper object leaks though.
-    // For this level of "professionalism", we'll keep it simple or maybe smart pointers later.
-    // Let's just let it be for now as it persists for the app duration.
 }
 
 int main(int argc, char **argv) {
+    // Force GDK to use a legacy (compatibility) OpenGL context.
+    // GTK3's GtkGLArea defaults to a core profile which does NOT support
+    // the fixed-function pipeline (glBegin/glEnd, GL_LIGHTING, etc.).
+    // Without this, all legacy GL calls silently fail -> blank white screen.
+    setenv("GDK_GL", "legacy", 1);
+
     GtkApplication *app;
     int status;
 

@@ -115,4 +115,62 @@ struct Matrix4 {
     const float* data() const { return m; }
 };
 
+// Unproject screen coordinates to world coordinates on a horizontal plane (Y=planeY).
+// screenX, screenY are normalized [0,1] (top-left origin).
+// Returns the world XZ position where the ray hits the plane.
+// Camera params are hardcoded to match Scene::render().
+inline bool unprojectScreenToFloor(float screenX, float screenY,
+                                    float planeY, int viewportW, int viewportH,
+                                    float& outX, float& outZ) {
+    // Camera parameters (must match Scene::render)
+    float eyeX = 0.0f, eyeY = 5.0f, eyeZ = 10.0f;
+    float fovY = 45.0f;
+    float aspect = (float)viewportW / (float)viewportH;
+
+    // Convert screen coords (0..1, top-left origin) to NDC (-1..1, bottom-left origin)
+    float ndcX = screenX * 2.0f - 1.0f;   // -1 (left) to +1 (right)
+    float ndcY = 1.0f - screenY * 2.0f;    // -1 (bottom) to +1 (top), flip Y
+
+    // Compute camera basis vectors (same as lookAt with target (0,0,0), up (0,1,0))
+    // Forward = normalize(target - eye)
+    float fx = 0.0f - eyeX, fy = 0.0f - eyeY, fz = 0.0f - eyeZ;
+    float fLen = std::sqrt(fx*fx + fy*fy + fz*fz);
+    fx /= fLen; fy /= fLen; fz /= fLen;
+
+    // Right = normalize(forward x up)
+    float rx = fy * 0.0f - fz * 1.0f;
+    float ry = fz * 0.0f - fx * 0.0f;
+    float rz = fx * 1.0f - fy * 0.0f;
+    float rLen = std::sqrt(rx*rx + ry*ry + rz*rz);
+    rx /= rLen; ry /= rLen; rz /= rLen;
+
+    // Up = right x forward
+    float ux = ry * fz - rz * fy;
+    float uy = rz * fx - rx * fz;
+    float uz = rx * fy - ry * fx;
+
+    // Half-heights of the near plane (in world units at distance 1)
+    float halfH = std::tan(fovY * (float)M_PI / 360.0f);
+    float halfW = halfH * aspect;
+
+    // Ray direction in world space
+    float dirX = fx + ndcX * halfW * rx + ndcY * halfH * ux;
+    float dirY = fy + ndcX * halfW * ry + ndcY * halfH * uy;
+    float dirZ = fz + ndcX * halfW * rz + ndcY * halfH * uz;
+
+    // Normalize
+    float dLen = std::sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
+    dirX /= dLen; dirY /= dLen; dirZ /= dLen;
+
+    // Ray-plane intersection: eye + t * dir, plane Y = planeY
+    // eyeY + t * dirY = planeY  =>  t = (planeY - eyeY) / dirY
+    if (std::fabs(dirY) < 1e-6f) return false; // Ray parallel to plane
+    float t = (planeY - eyeY) / dirY;
+    if (t < 0) return false; // Intersection behind camera
+
+    outX = eyeX + t * dirX;
+    outZ = eyeZ + t * dirZ;
+    return true;
+}
+
 #endif // MATHUTILS_H
