@@ -41,22 +41,44 @@ gboolean InputManager::on_key_press(GtkWidget* widget, GdkEventKey* event) {
     float dx = 0.0f;
     float dz = 0.0f;
 
+    // Get Camera Yaw
+    float yaw = scene->getCamera()->getYaw();
+    
+    // Calculate Forward and Right vectors on XZ plane
+    // Camera pos relative to target is (sin(yaw), ..., cos(yaw))
+    // So looking towards target is (-sin(yaw), ..., -cos(yaw))
+    float fwdX = -sin(yaw);
+    float fwdZ = -cos(yaw);
+    
+    // Right vector is perpendicular (cross product with up (0,1,0))
+    // (fwdX, 0, fwdZ) x (0, 1, 0) = (-fwdZ, 0, fwdX)
+    float rightX = -fwdZ;
+    float rightZ = fwdX;
+
     switch (event->keyval) {
         case GDK_KEY_w:
         case GDK_KEY_W:
-            dz = -speed;
+            // Forward
+            dx += fwdX * speed;
+            dz += fwdZ * speed;
             break;
         case GDK_KEY_s:
         case GDK_KEY_S:
-            dz = speed;
+            // Backward
+            dx -= fwdX * speed;
+            dz -= fwdZ * speed;
             break;
         case GDK_KEY_a:
         case GDK_KEY_A:
-            dx = -speed;
+            // Left (Negative Right)
+            dx -= rightX * speed;
+            dz -= rightZ * speed;
             break;
         case GDK_KEY_d:
         case GDK_KEY_D:
-            dx = speed;
+            // Right
+            dx += rightX * speed;
+            dz += rightZ * speed;
             break;
         default:
             return FALSE;
