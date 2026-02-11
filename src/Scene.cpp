@@ -46,7 +46,7 @@ void Scene::resize(int width, int height) {
 }
 
 void Scene::render() {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     glLoadIdentity();
     
     MathGL::lookAt(0.0f, 5.0f, 10.0f, 
@@ -62,32 +62,52 @@ void Scene::render() {
         glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
     }
     
-    // Draw solid objects
+    // ---- Step 1: Draw the floor AND mark it in stencil (stencil = 1) ----
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     drawFloor();
-    drawWall();
+    glDisable(GL_STENCIL_TEST);
     
+    // Draw wall and cubes (no stencil writes)
+    drawWall();
     for (const auto& cube : cubes) {
         drawCube(cube);
     }
     
-    // Draw shadow from the single light
+    // ---- Step 2: Draw shadows using stencil buffer ----
     if (lightActive) {
+        glEnable(GL_STENCIL_TEST);
+        // Only draw where stencil == 1 (the floor).
+        // On draw, increment stencil to 2 so the same pixel is never shaded twice
+        // (this eliminates fringe artifacts from overlapping semi-transparent shadow polys).
+        glStencilFunc(GL_EQUAL, 1, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+        
         glDisable(GL_LIGHTING);
+        glDisable(GL_DEPTH_TEST);  // Shadows always visible on floor
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         
-        glColor4f(0.0f, 0.0f, 0.0f, 0.3f);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
         
         glPushMatrix();
-        Matrix4 shadowMat = Matrix4::shadow(light.position, 0.01f);
+        Matrix4 shadowMat = Matrix4::shadow(light.position, 0.005f);
         glMultMatrixf(shadowMat.data());
         
+        const float wallZ = -5.0f;
+        bool lightInFront = (light.position.z > wallZ);
+        
         for (const auto& cube : cubes) {
-             glPushMatrix();
-             glTranslatef(cube.position.x, cube.position.y, cube.position.z);
-             float s = cube.size;
+            // Wall occlusion: skip shadow if light and cube are on opposite sides of the wall
+            bool cubeInFront = (cube.position.z > wallZ);
+            if (lightInFront != cubeInFront) continue;
+            
+            glPushMatrix();
+            glTranslatef(cube.position.x, cube.position.y, cube.position.z);
+            float s = cube.size;
              
-             glBegin(GL_QUADS);
+            glBegin(GL_QUADS);
                 // Front
                 glVertex3f(-s, -s,  s); glVertex3f( s, -s,  s); glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
                 // Back
@@ -100,12 +120,14 @@ void Scene::render() {
                 glVertex3f( s, -s, -s); glVertex3f( s,  s, -s); glVertex3f( s,  s,  s); glVertex3f( s, -s,  s);
                 // Left
                 glVertex3f(-s, -s, -s); glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s); glVertex3f(-s,  s, -s);
-             glEnd();
-             glPopMatrix();
+            glEnd();
+            glPopMatrix();
         }
         glPopMatrix();
         
         glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
         glEnable(GL_LIGHTING);
         
         // Draw light source indicator (small yellow cube)

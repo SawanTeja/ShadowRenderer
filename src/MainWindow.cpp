@@ -39,7 +39,7 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), dragIndex(-1),
     gtk_widget_set_vexpand(gl_area, TRUE);
     
     gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(gl_area), TRUE);
-    gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(gl_area), FALSE);
+    gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(gl_area), TRUE);
     
     gtk_box_pack_start(GTK_BOX(box), gl_area, TRUE, TRUE, 0);
     
