@@ -141,6 +141,7 @@ private:
     struct Tree {
         Vector3 position;
         float size;
+        PhysicsObject* physObj;
     };
     std::vector<Tree> trees;
     void generateTrees(int count);

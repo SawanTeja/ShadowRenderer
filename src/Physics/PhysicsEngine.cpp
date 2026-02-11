@@ -109,6 +109,40 @@ void PhysicsEngine::resolveCollision(PhysicsObject* a, PhysicsObject* b) {
     float overlapZ = (a->size.z + b->size.z) - std::abs(a->position.z - b->position.z);
 
     // Find the smallest overlap (shallowest penetration) to resolve
+    // Find the smallest overlap (shallowest penetration) to resolve
+    
+    // If 'b' is static, 'a' moves full overlap
+    if (b->isStatic) {
+        if (overlapX < overlapY && overlapX < overlapZ) {
+            a->position.x += (a->position.x < b->position.x) ? -overlapX : overlapX;
+            a->velocity.x *= -0.5f; // Bounce/Friction
+        } else if (overlapY < overlapX && overlapY < overlapZ) {
+            a->position.y += (a->position.y < b->position.y) ? -overlapY : overlapY;
+            a->velocity.y *= -0.5f;
+        } else {
+            a->position.z += (a->position.z < b->position.z) ? -overlapZ : overlapZ;
+            a->velocity.z *= -0.5f;
+        }
+        return;
+    }
+    
+    // If 'a' is static (shouldn't happen with current loop order if we check effectively, 
+    // but useful for completeness), 'b' moves full overlap
+    if (a->isStatic) {
+        if (overlapX < overlapY && overlapX < overlapZ) {
+            b->position.x += (b->position.x < a->position.x) ? overlapX : -overlapX; // Push b away
+            b->velocity.x *= -0.5f;
+        } else if (overlapY < overlapX && overlapY < overlapZ) {
+            b->position.y += (b->position.y < a->position.y) ? overlapY : -overlapY;
+            b->velocity.y *= -0.5f;
+        } else {
+            b->position.z += (b->position.z < a->position.z) ? overlapZ : -overlapZ;
+            b->velocity.z *= -0.5f;
+        }
+        return;
+    }
+
+    // Both dynamic
     if (overlapX < overlapY && overlapX < overlapZ) {
         // Resolve on X axis
         if (a->position.x < b->position.x) {

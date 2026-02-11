@@ -740,11 +740,23 @@ void Scene::generateTrees(int count) {
         float x = (rand() % 800) / 10.0f - 40.0f;
         float z = (rand() % 800) / 10.0f - 40.0f;
         
-        // Avoid center area
+        // Avoid center area (keep spawn clear)
         if (x > -5 && x < 5 && z > -5 && z < 5) continue;
         
         t.position = Vector3(x, 0.0f, z);
-        t.size = (rand() % 100) / 100.0f * 0.5f + 0.5f; // 0.5 to 1.0 variation
+        // Bigger trees: 1.5 to 3.0
+        t.size = (rand() % 150) / 100.0f + 1.5f; 
+        
+        // Physics
+        PhysicsObject* p = physicsEngine->addObject(t.position);
+        p->isStatic = true;
+        // Approximation: trunk width is 0.2 * size, height is size * 1.5?
+        // Let's make the collision box roughly the size of the trunk
+        float trunkRadius = t.size * 0.3f; // Slightly wider for ease of hitting
+        float totalHeight = t.size * 5.0f; // Tall enough
+        p->size = Vector3(trunkRadius, totalHeight, trunkRadius);
+        
+        t.physObj = p;
         trees.push_back(t);
     }
 }
