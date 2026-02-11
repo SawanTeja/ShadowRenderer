@@ -1,0 +1,3 @@
+/home/sawan/Tejashvi/Linux/CMakeFiles/Basic.dir
+/home/sawan/Tejashvi/Linux/CMakeFiles/edit_cache.dir
+/home/sawan/Tejashvi/Linux/CMakeFiles/rebuild_cache.dir
