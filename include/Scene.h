@@ -55,6 +55,10 @@ private:
     void drawCubeWireframe(const Vector3& pos, float size);
     void drawFloor();
     void drawWall();
+
+    GLuint floorTextureId;
+    GLuint wallTextureId;
+    GLuint loadTexture(const char* filename);
 };
 
 #endif // SCENE_H
