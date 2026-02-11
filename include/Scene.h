@@ -28,6 +28,17 @@ public:
     Vector3 getLightPosition() const;
     bool hasLight() const;
 
+    // Picking & selection
+    // Returns -1 = nothing, 0..N-1 = cube index, N = light
+    int pickObject(float screenX, float screenY, int vpW, int vpH);
+    void setSelected(int index);
+    int  getSelected() const;
+
+    // Move APIs
+    void moveCube(int index, float x, float z);
+    int  cubeCount() const;
+    Vector3 getCubePosition(int index) const;
+
 private:
     struct Light {
         Vector3 position;
@@ -38,8 +49,10 @@ private:
     Light light;
     bool lightActive;
     float rotation;
+    int selectedIndex;  // -1 = none
     
     void drawCube(const Cube& cube);
+    void drawCubeWireframe(const Vector3& pos, float size);
     void drawFloor();
     void drawWall();
 };

@@ -3,7 +3,7 @@
 #include <cmath>
 #include <iostream>
 
-Scene::Scene() : rotation(0.0f), lightActive(false) {
+Scene::Scene() : rotation(0.0f), lightActive(false), selectedIndex(-1) {
     // Default light color: warm white
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
@@ -132,6 +132,27 @@ void Scene::render() {
         glEnable(GL_LIGHTING);
         glPopMatrix();
     }
+
+    // Draw selection highlight wireframe
+    if (selectedIndex >= 0) {
+        glDisable(GL_LIGHTING);
+        glDisable(GL_DEPTH_TEST);
+        glColor3f(1.0f, 1.0f, 0.0f); // Bright yellow
+        glLineWidth(2.5f);
+
+        if (selectedIndex < (int)cubes.size()) {
+            // Highlight a cube
+            const Cube& c = cubes[selectedIndex];
+            drawCubeWireframe(c.position, c.size);
+        } else if (selectedIndex == (int)cubes.size() && lightActive) {
+            // Highlight the light
+            drawCubeWireframe(light.position, 0.15f);
+        }
+
+        glLineWidth(1.0f);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_LIGHTING);
+    }
 }
 
 void Scene::addCube(float r, float g, float b) {
@@ -179,6 +200,69 @@ bool Scene::hasLight() const {
     return lightActive;
 }
 
+// ---------- Picking & selection ----------
+
+int Scene::pickObject(float screenX, float screenY, int vpW, int vpH) {
+    float origin[3], dir[3];
+    buildScreenRay(screenX, screenY, vpW, vpH, origin, dir);
+
+    int bestIdx = -1;
+    float bestT = 1e30f;
+
+    // Test each cube
+    for (int i = 0; i < (int)cubes.size(); i++) {
+        const Cube& c = cubes[i];
+        float s = c.size;
+        float t;
+        if (rayIntersectsAABB(origin, dir,
+                              c.position.x - s, c.position.y - s, c.position.z - s,
+                              c.position.x + s, c.position.y + s, c.position.z + s, t)) {
+            if (t < bestT) { bestT = t; bestIdx = i; }
+        }
+    }
+
+    // Test the light indicator (small cube around light position)
+    if (lightActive) {
+        float ls = 0.15f;
+        float t;
+        if (rayIntersectsAABB(origin, dir,
+                              light.position.x - ls, light.position.y - ls, light.position.z - ls,
+                              light.position.x + ls, light.position.y + ls, light.position.z + ls, t)) {
+            if (t < bestT) { bestT = t; bestIdx = (int)cubes.size(); }
+        }
+    }
+
+    return bestIdx;
+}
+
+void Scene::setSelected(int index) {
+    selectedIndex = index;
+}
+
+int Scene::getSelected() const {
+    return selectedIndex;
+}
+
+void Scene::moveCube(int index, float x, float z) {
+    if (index >= 0 && index < (int)cubes.size()) {
+        cubes[index].position.x = x;
+        cubes[index].position.z = z;
+    }
+}
+
+int Scene::cubeCount() const {
+    return (int)cubes.size();
+}
+
+Vector3 Scene::getCubePosition(int index) const {
+    if (index >= 0 && index < (int)cubes.size()) {
+        return cubes[index].position;
+    }
+    return Vector3();
+}
+
+// ---------- Drawing helpers ----------
+
 void Scene::drawCube(const Cube& cube) {
     glPushMatrix();
     glTranslatef(cube.position.x, cube.position.y, cube.position.z);
@@ -206,6 +290,34 @@ void Scene::drawCube(const Cube& cube) {
         glVertex3f(-s, -s, -s); glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s); glVertex3f(-s,  s, -s);
     glEnd();
     
+    glPopMatrix();
+}
+
+void Scene::drawCubeWireframe(const Vector3& pos, float size) {
+    float s = size * 1.02f; // Slightly larger to avoid z-fighting
+    glPushMatrix();
+    glTranslatef(pos.x, pos.y, pos.z);
+
+    glBegin(GL_LINE_STRIP);
+        // Bottom face
+        glVertex3f(-s, -s, -s); glVertex3f( s, -s, -s);
+        glVertex3f( s, -s,  s); glVertex3f(-s, -s,  s);
+        glVertex3f(-s, -s, -s);
+    glEnd();
+    glBegin(GL_LINE_STRIP);
+        // Top face
+        glVertex3f(-s,  s, -s); glVertex3f( s,  s, -s);
+        glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
+        glVertex3f(-s,  s, -s);
+    glEnd();
+    glBegin(GL_LINES);
+        // Vertical edges
+        glVertex3f(-s, -s, -s); glVertex3f(-s,  s, -s);
+        glVertex3f( s, -s, -s); glVertex3f( s,  s, -s);
+        glVertex3f( s, -s,  s); glVertex3f( s,  s,  s);
+        glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s);
+    glEnd();
+
     glPopMatrix();
 }
 

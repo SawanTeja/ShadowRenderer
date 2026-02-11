@@ -173,4 +173,72 @@ inline bool unprojectScreenToFloor(float screenX, float screenY,
     return true;
 }
 
+// Build a ray (origin + direction) from normalized screen coords.
+// Camera params are hardcoded to match Scene::render().
+inline void buildScreenRay(float screenX, float screenY,
+                           int viewportW, int viewportH,
+                           float outOrigin[3], float outDir[3]) {
+    float eyeX = 0.0f, eyeY = 5.0f, eyeZ = 10.0f;
+    float fovY = 45.0f;
+    float aspect = (float)viewportW / (float)viewportH;
+
+    float ndcX = screenX * 2.0f - 1.0f;
+    float ndcY = 1.0f - screenY * 2.0f;
+
+    // Camera basis vectors (target = origin, up = Y)
+    float fx = 0.0f - eyeX, fy = 0.0f - eyeY, fz = 0.0f - eyeZ;
+    float fLen = std::sqrt(fx*fx + fy*fy + fz*fz);
+    fx /= fLen; fy /= fLen; fz /= fLen;
+
+    float rx = fy * 0.0f - fz * 1.0f;
+    float ry = fz * 0.0f - fx * 0.0f;
+    float rz = fx * 1.0f - fy * 0.0f;
+    float rLen = std::sqrt(rx*rx + ry*ry + rz*rz);
+    rx /= rLen; ry /= rLen; rz /= rLen;
+
+    float ux = ry * fz - rz * fy;
+    float uy = rz * fx - rx * fz;
+    float uz = rx * fy - ry * fx;
+
+    float halfH = std::tan(fovY * (float)M_PI / 360.0f);
+    float halfW = halfH * aspect;
+
+    outOrigin[0] = eyeX; outOrigin[1] = eyeY; outOrigin[2] = eyeZ;
+
+    float dx = fx + ndcX * halfW * rx + ndcY * halfH * ux;
+    float dy = fy + ndcX * halfW * ry + ndcY * halfH * uy;
+    float dz = fz + ndcX * halfW * rz + ndcY * halfH * uz;
+    float dLen = std::sqrt(dx*dx + dy*dy + dz*dz);
+    outDir[0] = dx / dLen; outDir[1] = dy / dLen; outDir[2] = dz / dLen;
+}
+
+// Slab-based ray-AABB intersection test.
+// Returns true if the ray hits the box, and writes the parametric distance to outT.
+inline bool rayIntersectsAABB(const float origin[3], const float dir[3],
+                              float minX, float minY, float minZ,
+                              float maxX, float maxY, float maxZ,
+                              float& outT) {
+    float tmin = -1e30f, tmax = 1e30f;
+    float bounds[2][3] = {{minX, minY, minZ}, {maxX, maxY, maxZ}};
+
+    for (int i = 0; i < 3; i++) {
+        if (std::fabs(dir[i]) < 1e-8f) {
+            // Ray parallel to slab
+            if (origin[i] < bounds[0][i] || origin[i] > bounds[1][i])
+                return false;
+        } else {
+            float invD = 1.0f / dir[i];
+            float t0 = (bounds[0][i] - origin[i]) * invD;
+            float t1 = (bounds[1][i] - origin[i]) * invD;
+            if (t0 > t1) { float tmp = t0; t0 = t1; t1 = tmp; }
+            if (t0 > tmin) tmin = t0;
+            if (t1 < tmax) tmax = t1;
+            if (tmin > tmax) return false;
+        }
+    }
+    if (tmax < 0) return false;
+    outT = (tmin >= 0) ? tmin : tmax;
+    return true;
+}
+
 #endif // MATHUTILS_H

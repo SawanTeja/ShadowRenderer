@@ -21,9 +21,9 @@ private:
 
     Scene* scene;
     
-    // Drag state for light
-    bool draggingLight;
-    float lightPlaneY;  // The Y-plane the light lives on (for consistent dragging)
+    // Drag state (generic: works for cubes and light)
+    int   dragIndex;    // -1 = not dragging, 0..N-1 = cube, N = light
+    float dragPlaneY;   // Y-plane the dragged object lives on
 
     static void on_button_clicked(GtkWidget* widget, gpointer data);
     
