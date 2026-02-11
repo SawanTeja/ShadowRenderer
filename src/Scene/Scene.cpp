@@ -351,19 +351,21 @@ float Cone::intersect(const float origin[3], const float dir[3]) const {
 // ==========================================
 
 Scene::Scene() : lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0),
-                 camera(new Camera()), terrain(nullptr) {
+                 camera(new Camera()), terrain(nullptr), shadowSystem(nullptr) {
     // Default light
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
     
     physicsEngine = new PhysicsEngine();
     terrain = new Terrain(50.0f, 128);
+    shadowSystem = new ShadowSystem(64, 50.0f);
 }
 
 Scene::~Scene() {
     delete camera;
     delete physicsEngine;
     delete terrain;
+    delete shadowSystem;
     for(auto s : shapes) delete s;
     shapes.clear();
     physicsMap.clear();
@@ -454,11 +456,7 @@ void Scene::render() {
     }
     
     // Draw Floor with Stencil
-    glEnable(GL_STENCIL_TEST);
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     drawFloor();
-    glDisable(GL_STENCIL_TEST);
     
     drawWall();
     
@@ -472,63 +470,13 @@ void Scene::render() {
         drawTree(t);
     }
     
-    // Shadows
+    // Draw Light wireframe
     if (lightActive) {
-        glEnable(GL_STENCIL_TEST);
-        glStencilFunc(GL_EQUAL, 1, 0xFF); // Only on floor
-        glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-        glDepthMask(GL_FALSE);
-        
-        glEnable(GL_POLYGON_OFFSET_FILL);
-        glPolygonOffset(-1.0f, -1.0f);
-
-        glPushMatrix();
-        Matrix4 shadowMat = Matrix4::shadow(light.position, 0.0f);
-        glMultMatrixf(shadowMat.data());
-        
-        for (auto shape : shapes) {
-             // Simple check if light is in front of object relative to wall "could" be done, but
-             // generic shadow volume is robust. Here we are using projection.
-             // We just project everything.
-             shape->draw();
-        }
-        
-        // Tree shadows
-        for (const auto& t : trees) {
-            drawTree(t);
-        }
-        glPopMatrix();
-        
-        // Draw Shadow Color
-        glStencilFunc(GL_EQUAL, 2, 0xFF);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        
-        glDisable(GL_LIGHTING);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
-        
-        glBegin(GL_QUADS);
-            glVertex3f(-100.0f, 0.0f, 100.0f);
-            glVertex3f( 100.0f, 0.0f, 100.0f);
-            glVertex3f( 100.0f, 0.0f, -100.0f);
-            glVertex3f(-100.0f, 0.0f, -100.0f);
-        glEnd();
-        
-        glDisable(GL_POLYGON_OFFSET_FILL);
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
-        glDisable(GL_STENCIL_TEST);
-        glEnable(GL_LIGHTING);
-        
-        // Draw Light
         glPushMatrix();
         glTranslatef(light.position.x, light.position.y, light.position.z);
         glDisable(GL_LIGHTING);
         glColor3f(light.color.x, light.color.y, light.color.z); 
-        drawLightWireframe(Vector3(0,0,0), 0.15f); // Local coords
+        drawLightWireframe(Vector3(0,0,0), 0.15f);
         glEnable(GL_LIGHTING);
         glPopMatrix();
     }
@@ -742,7 +690,39 @@ PhysicsObject* Scene::getPhysicsObject(int index) {
 
 void Scene::drawFloor() {
     if (terrain) {
-        terrain->render(floorTextureId);
+        // Compute shadows if light is active
+        if (lightActive && shadowSystem) {
+            std::vector<ShadowSystem::Caster> casters;
+
+            // Add shapes as shadow casters
+            for (auto shape : shapes) {
+                ShadowSystem::Caster c;
+                c.center = shape->position;
+                c.halfExtents = Vector3(shape->size, shape->size, shape->size);
+                casters.push_back(c);
+            }
+
+            // Add trees as shadow casters
+            for (const auto& tree : trees) {
+                ShadowSystem::Caster c;
+                float trunkH = tree.size * 1.5f;
+                float coneH = tree.size * 2.5f;
+                float totalH = trunkH + coneH * 0.5f;
+                c.center = Vector3(tree.position.x,
+                                   tree.position.y + totalH * 0.5f,
+                                   tree.position.z);
+                c.halfExtents = Vector3(tree.size * 0.8f, totalH * 0.5f, tree.size * 0.8f);
+                casters.push_back(c);
+            }
+
+            shadowSystem->compute(light.position,
+                [this](float x, float z) { return terrain->getHeight(x, z); },
+                casters);
+
+            terrain->render(floorTextureId, shadowSystem);
+        } else {
+            terrain->render(floorTextureId, nullptr);
+        }
     } else {
         // Fallback flat floor
         if (floorTextureId != 0) {

@@ -6,6 +6,9 @@
 #include <GL/gl.h>
 #include "MathUtils.h"
 
+// Forward declaration
+class ShadowSystem;
+
 class Terrain {
 public:
     Terrain(float worldSize = 50.0f, int gridRes = 128);
@@ -20,8 +23,8 @@ public:
     // Get approximate normal at world (x, z) for lighting
     Vector3 getNormal(float x, float z) const;
 
-    // Render the terrain mesh
-    void render(GLuint textureId) const;
+    // Render the terrain mesh, optionally with shadow data
+    void render(GLuint textureId, const ShadowSystem* shadows = nullptr) const;
 
     float getWorldSize() const { return worldSize; }
 

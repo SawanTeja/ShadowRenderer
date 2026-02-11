@@ -1,4 +1,5 @@
 #include "Terrain.h"
+#include "ShadowSystem.h"
 #include <cstdlib>
 #include <iostream>
 
@@ -172,17 +173,15 @@ Vector3 Terrain::getNormal(float x, float z) const {
 }
 
 // ================================================================
-// Render the terrain mesh
+// Render the terrain mesh with optional shadow data
 // ================================================================
-void Terrain::render(GLuint textureId) const {
+void Terrain::render(GLuint textureId, const ShadowSystem* shadows) const {
     float cellSize = (2.0f * worldSize) / gridRes;
 
-    if (textureId != 0) {
+    bool hasTexture = (textureId != 0);
+    if (hasTexture) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, textureId);
-        glColor3f(0.5f, 1.0f, 0.5f);
-    } else {
-        glColor3f(0.1f, 0.6f, 0.1f);
     }
 
     // Render as triangle strips, row by row
@@ -202,6 +201,19 @@ void Terrain::render(GLuint textureId) const {
                 Vector3 n = getNormal(wx, wz);
                 glNormal3f(n.x, n.y, n.z);
 
+                // Per-vertex shadow darkening
+                float shadowVal = 0.0f;
+                if (shadows) {
+                    shadowVal = shadows->getShadowAt(wx, wz);
+                }
+                float brightness = 1.0f - shadowVal * 0.5f; // Darken by up to 50%
+
+                if (hasTexture) {
+                    glColor3f(0.5f * brightness, 1.0f * brightness, 0.5f * brightness);
+                } else {
+                    glColor3f(0.1f * brightness, 0.6f * brightness, 0.1f * brightness);
+                }
+
                 // Texture coordinates
                 glTexCoord2f(wx * texScale, wz * texScale);
 
@@ -211,7 +223,7 @@ void Terrain::render(GLuint textureId) const {
         glEnd();
     }
 
-    if (textureId != 0) {
+    if (hasTexture) {
         glDisable(GL_TEXTURE_2D);
     }
 }

@@ -5,6 +5,7 @@
 #include <GL/gl.h>
 #include "MathUtils.h"
 #include "Terrain.h"
+#include "ShadowSystem.h"
 #include "Camera.h"
 #include "Physics/PhysicsEngine.h"
 #include <map>
@@ -141,6 +142,7 @@ private:
     PhysicsEngine* physicsEngine;
     std::map<Shape*, PhysicsObject*> physicsMap;
     Terrain* terrain;
+    ShadowSystem* shadowSystem;
 
     void drawFloor();
     void drawWall();
