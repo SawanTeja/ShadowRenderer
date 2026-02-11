@@ -115,13 +115,13 @@ void PhysicsEngine::resolveCollision(PhysicsObject* a, PhysicsObject* b) {
     if (b->isStatic) {
         if (overlapX < overlapY && overlapX < overlapZ) {
             a->position.x += (a->position.x < b->position.x) ? -overlapX : overlapX;
-            a->velocity.x *= -0.5f; // Bounce/Friction
+            a->velocity.x = 0.0f; // Slide/Stop, don't bounce
         } else if (overlapY < overlapX && overlapY < overlapZ) {
             a->position.y += (a->position.y < b->position.y) ? -overlapY : overlapY;
-            a->velocity.y *= -0.5f;
+            a->velocity.y = 0.0f;
         } else {
             a->position.z += (a->position.z < b->position.z) ? -overlapZ : overlapZ;
-            a->velocity.z *= -0.5f;
+            a->velocity.z = 0.0f;
         }
         return;
     }
@@ -131,13 +131,13 @@ void PhysicsEngine::resolveCollision(PhysicsObject* a, PhysicsObject* b) {
     if (a->isStatic) {
         if (overlapX < overlapY && overlapX < overlapZ) {
             b->position.x += (b->position.x < a->position.x) ? overlapX : -overlapX; // Push b away
-            b->velocity.x *= -0.5f;
+            b->velocity.x = 0.0f;
         } else if (overlapY < overlapX && overlapY < overlapZ) {
             b->position.y += (b->position.y < a->position.y) ? overlapY : -overlapY;
-            b->velocity.y *= -0.5f;
+            b->velocity.y = 0.0f;
         } else {
             b->position.z += (b->position.z < a->position.z) ? overlapZ : -overlapZ;
-            b->velocity.z *= -0.5f;
+            b->velocity.z = 0.0f;
         }
         return;
     }
