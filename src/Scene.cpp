@@ -6,7 +6,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-Scene::Scene() : rotation(0.0f), lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0) {
+Scene::Scene() : rotation(0.0f), lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0),
+                 cameraYaw(0.0f), cameraPitch(0.5f), cameraDistance(10.0f) {
     // Default light color: warm white
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
@@ -83,7 +84,11 @@ void Scene::render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     glLoadIdentity();
     
-    MathGL::lookAt(0.0f, 5.0f, 10.0f, 
+    float camX = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    float camY = cameraDistance * sin(cameraPitch);
+    float camZ = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+    
+    MathGL::lookAt(camX, camY, camZ, 
               0.0f, 0.0f, 0.0f,
               0.0f, 1.0f, 0.0f);
               
@@ -254,6 +259,27 @@ void Scene::addCubeAt(float x, float z, float r, float g, float b) {
     cubes.push_back(c);
 }
 
+void Scene::rotateCamera(float dx, float dy) {
+    cameraYaw += dx;
+    cameraPitch += dy;
+    
+    // Clamp pitch to avoid flipping
+    if (cameraPitch < 0.1f) cameraPitch = 0.1f;
+    if (cameraPitch > 1.5f) cameraPitch = 1.5f; // Slightly less than PI/2
+}
+
+void Scene::zoomCamera(float delta) {
+    cameraDistance -= delta;
+    if (cameraDistance < 2.0f) cameraDistance = 2.0f;
+    if (cameraDistance > 50.0f) cameraDistance = 50.0f;
+}
+
+void Scene::getCameraPosition(float& x, float& y, float& z) const {
+    x = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    y = cameraDistance * sin(cameraPitch);
+    z = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+}
+
 void Scene::setLightWorldPos(float x, float y, float z) {
     light.position.x = x;
     light.position.y = y;
@@ -273,7 +299,12 @@ bool Scene::hasLight() const {
 
 int Scene::pickObject(float screenX, float screenY, int vpW, int vpH) {
     float origin[3], dir[3];
-    buildScreenRay(screenX, screenY, vpW, vpH, origin, dir);
+    
+    float camX = cameraDistance * cos(cameraPitch) * sin(cameraYaw);
+    float camY = cameraDistance * sin(cameraPitch);
+    float camZ = cameraDistance * cos(cameraPitch) * cos(cameraYaw);
+
+    buildScreenRay(screenX, screenY, vpW, vpH, camX, camY, camZ, origin, dir);
 
     int bestIdx = -1;
     float bestT = 1e30f;

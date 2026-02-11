@@ -23,6 +23,11 @@ public:
     void addCube(float r, float g, float b);
     void addCubeAt(float x, float z, float r, float g, float b);
 
+    // Camera Control
+    void rotateCamera(float dx, float dy);
+    void zoomCamera(float delta);
+    void getCameraPosition(float& x, float& y, float& z) const;
+
     // Single light API
     void setLightWorldPos(float x, float y, float z);
     Vector3 getLightPosition() const;
@@ -49,6 +54,12 @@ private:
     Light light;
     bool lightActive;
     float rotation;
+    
+    // Camera State
+    float cameraYaw;      // Horizontal rotation (radians)
+    float cameraPitch;    // Vertical rotation (radians)
+    float cameraDistance; // Distance from center
+    
     int selectedIndex;  // -1 = none
     
     void drawCube(const Cube& cube);

@@ -15,6 +15,7 @@ private:
     GtkWidget* window;
     GtkWidget* button;
     GtkWidget* mode_combo;
+    GtkWidget* viewModeCheck;
     GtkWidget* color_button;
     GtkWidget* box;
     GtkWidget* gl_area;
@@ -34,6 +35,7 @@ private:
     
     // Mouse interaction
     static gboolean on_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer data);
+    static gboolean on_scroll(GtkWidget* widget, GdkEventScroll* event, gpointer data);
     static gboolean on_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data);
     static gboolean on_button_release(GtkWidget* widget, GdkEventButton* event, gpointer data);
 };

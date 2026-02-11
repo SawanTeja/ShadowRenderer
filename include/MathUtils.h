@@ -118,12 +118,11 @@ struct Matrix4 {
 // Unproject screen coordinates to world coordinates on a horizontal plane (Y=planeY).
 // screenX, screenY are normalized [0,1] (top-left origin).
 // Returns the world XZ position where the ray hits the plane.
-// Camera params are hardcoded to match Scene::render().
 inline bool unprojectScreenToFloor(float screenX, float screenY,
                                     float planeY, int viewportW, int viewportH,
+                                    float eyeX, float eyeY, float eyeZ,
                                     float& outX, float& outZ) {
-    // Camera parameters (must match Scene::render)
-    float eyeX = 0.0f, eyeY = 5.0f, eyeZ = 10.0f;
+    // Camera parameters
     float fovY = 45.0f;
     float aspect = (float)viewportW / (float)viewportH;
 
@@ -174,11 +173,10 @@ inline bool unprojectScreenToFloor(float screenX, float screenY,
 }
 
 // Build a ray (origin + direction) from normalized screen coords.
-// Camera params are hardcoded to match Scene::render().
 inline void buildScreenRay(float screenX, float screenY,
                            int viewportW, int viewportH,
+                           float eyeX, float eyeY, float eyeZ,
                            float outOrigin[3], float outDir[3]) {
-    float eyeX = 0.0f, eyeY = 5.0f, eyeZ = 10.0f;
     float fovY = 45.0f;
     float aspect = (float)viewportW / (float)viewportH;
 
