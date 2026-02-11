@@ -28,39 +28,37 @@ void PhysicsEngine::removeObject(PhysicsObject* obj) {
 }
 
 void PhysicsEngine::update(float dt) {
+    const float GRAVITY = -15.0f; // Gravity acceleration (units/s^2)
+
     for (auto obj : objects) {
         if (obj->isStatic) continue;
 
-        // Apply friction if no acceleration (simple damping for now)
-        // Or constantly apply friction against velocity
-        
-        // Simple Euler Integration
-        // v = v + a * dt
+        // Apply gravity
+        obj->velocity.y += GRAVITY * dt;
+
+        // Apply user acceleration (WASD input)
         obj->velocity.x += obj->acceleration.x * dt;
         obj->velocity.y += obj->acceleration.y * dt;
         obj->velocity.z += obj->acceleration.z * dt;
 
-        // Apply Friction
-        // Friction force opposes velocity: F_f = -mu * v
-        // decel = -mu * v
-        // We can implement simple damping: v *= (1 - friction * dt)
+        // Apply horizontal friction (only XZ, not Y — gravity handles vertical)
         if (obj->friction > 0.0f) {
             float damping = 1.0f - (obj->friction * dt);
             if (damping < 0.0f) damping = 0.0f;
             
-            // Apply straight damping
             obj->velocity.x *= damping;
-            obj->velocity.y = obj->velocity.y * damping; 
-            obj->velocity.y *= damping;
             obj->velocity.z *= damping;
             
-            // Stop completely if very slow
-            if (obj->velocity.length() < 0.01f && obj->acceleration.length() < 0.01f) {
-                 obj->velocity = Vector3(0,0,0);
+            // Stop horizontal movement if very slow
+            float horizSpeed = sqrt(obj->velocity.x * obj->velocity.x + obj->velocity.z * obj->velocity.z);
+            float horizAccel = sqrt(obj->acceleration.x * obj->acceleration.x + obj->acceleration.z * obj->acceleration.z);
+            if (horizSpeed < 0.01f && horizAccel < 0.01f) {
+                 obj->velocity.x = 0.0f;
+                 obj->velocity.z = 0.0f;
             }
         }
 
-        // x = x + v * dt
+        // Position integration: x = x + v * dt
         obj->position.x += obj->velocity.x * dt;
         obj->position.y += obj->velocity.y * dt;
         obj->position.z += obj->velocity.z * dt;
@@ -81,9 +79,16 @@ void PhysicsEngine::checkCollisions(float dt) {
 
         if (obj->position.y - obj->size.y < groundY) {
             obj->position.y = groundY + obj->size.y;
-            obj->velocity.y = -obj->velocity.y * 0.5f; // Bounce with damping
             
-            // Apply friction on ground
+            // Bounce with damping, but stop if velocity is tiny
+            float bounceVel = -obj->velocity.y * 0.3f;
+            if (std::abs(bounceVel) < 0.5f) {
+                obj->velocity.y = 0.0f; // Stop bouncing
+            } else {
+                obj->velocity.y = bounceVel;
+            }
+            
+            // Apply friction on ground contact
             obj->velocity.x *= 0.9f;
             obj->velocity.z *= 0.9f;
         }
