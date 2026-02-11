@@ -1,0 +1,30 @@
+# --- CMake Build Artifacts ---
+# These are generated when you run cmake .
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+*.cbp
+
+# --- Compiled Object Files ---
+*.o
+*.obj
+
+# --- Executables ---
+# The specific binaries seen in your screenshot
+Basic
+BasicSoftware
+
+# Catch-all for other compiled binaries (Windows/Linux)
+*.exe
+*.out
+*.app
+
+# --- IDE Settings ---
+# Visual Studio Code settings (optional, but recommended to ignore)
+.vscode/
+
+# --- System Files ---
+.DS_Store
+Thumbs.db

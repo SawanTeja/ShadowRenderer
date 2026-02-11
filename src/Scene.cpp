@@ -79,54 +79,81 @@ void Scene::render() {
     if (lightActive) {
         glEnable(GL_STENCIL_TEST);
         // Only draw where stencil == 1 (the floor).
-        // On draw, increment stencil to 2 so the same pixel is never shaded twice
-        // (this eliminates fringe artifacts from overlapping semi-transparent shadow polys).
+        // On draw, increment stencil to 2 so the same pixel is never shaded twice.
         glStencilFunc(GL_EQUAL, 1, 0xFF);
         glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
         
         glDisable(GL_LIGHTING);
-        glDisable(GL_DEPTH_TEST);  // Shadows always visible on floor
+        glDepthMask(GL_FALSE);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         
         glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
         
-        glPushMatrix();
-        Matrix4 shadowMat = Matrix4::shadow(light.position, 0.005f);
-        glMultMatrixf(shadowMat.data());
-        
         const float wallZ = -5.0f;
+        const float shadowY = 0.005f;
         bool lightInFront = (light.position.z > wallZ);
+        float lx = light.position.x, ly = light.position.y, lz = light.position.z;
         
         for (const auto& cube : cubes) {
             // Wall occlusion: skip shadow if light and cube are on opposite sides of the wall
             bool cubeInFront = (cube.position.z > wallZ);
             if (lightInFront != cubeInFront) continue;
             
-            glPushMatrix();
-            glTranslatef(cube.position.x, cube.position.y, cube.position.z);
+            // Project 8 cube corners onto the shadow plane (y=shadowY) from the light
             float s = cube.size;
-             
-            glBegin(GL_QUADS);
-                // Front
-                glVertex3f(-s, -s,  s); glVertex3f( s, -s,  s); glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
-                // Back
-                glVertex3f(-s, -s, -s); glVertex3f(-s,  s, -s); glVertex3f( s,  s, -s); glVertex3f( s, -s, -s);
-                // Top
-                glVertex3f(-s,  s, -s); glVertex3f(-s,  s,  s); glVertex3f( s,  s,  s); glVertex3f( s,  s, -s);
-                // Bottom
-                glVertex3f(-s, -s, -s); glVertex3f( s, -s, -s); glVertex3f( s, -s,  s); glVertex3f(-s, -s,  s);
-                // Right
-                glVertex3f( s, -s, -s); glVertex3f( s,  s, -s); glVertex3f( s,  s,  s); glVertex3f( s, -s,  s);
-                // Left
-                glVertex3f(-s, -s, -s); glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s); glVertex3f(-s,  s, -s);
+            float cx = cube.position.x, cy = cube.position.y, cz = cube.position.z;
+            float corners[8][3] = {
+                {cx-s, cy-s, cz-s}, {cx+s, cy-s, cz-s}, {cx+s, cy-s, cz+s}, {cx-s, cy-s, cz+s},
+                {cx-s, cy+s, cz-s}, {cx+s, cy+s, cz-s}, {cx+s, cy+s, cz+s}, {cx-s, cy+s, cz+s}
+            };
+            
+            float proj[8][2]; // projected x, z on shadow plane
+            int count = 0;
+            float centX = 0, centZ = 0;
+            
+            for (int i = 0; i < 8; i++) {
+                float dy = ly - corners[i][1];
+                if (dy < 0.001f) continue; // Light at or below this corner
+                float t = (ly - shadowY) / dy;
+                proj[count][0] = lx + (corners[i][0] - lx) * t;
+                proj[count][1] = lz + (corners[i][2] - lz) * t;
+                centX += proj[count][0];
+                centZ += proj[count][1];
+                count++;
+            }
+            if (count < 3) continue;
+            
+            centX /= count;
+            centZ /= count;
+            
+            // Sort projected points by angle around their centroid for a clean convex polygon
+            float angles[8];
+            for (int i = 0; i < count; i++) {
+                angles[i] = std::atan2(proj[i][1] - centZ, proj[i][0] - centX);
+            }
+            for (int i = 0; i < count - 1; i++) {
+                for (int j = i + 1; j < count; j++) {
+                    if (angles[j] < angles[i]) {
+                        float tmpA = angles[i]; angles[i] = angles[j]; angles[j] = tmpA;
+                        float tmpX = proj[i][0]; proj[i][0] = proj[j][0]; proj[j][0] = tmpX;
+                        float tmpZ = proj[i][1]; proj[i][1] = proj[j][1]; proj[j][1] = tmpZ;
+                    }
+                }
+            }
+            
+            // Draw as a single triangle fan — one clean polygon, no overlaps, no fringes
+            glBegin(GL_TRIANGLE_FAN);
+                glVertex3f(centX, shadowY, centZ);
+                for (int i = 0; i < count; i++) {
+                    glVertex3f(proj[i][0], shadowY, proj[i][1]);
+                }
+                glVertex3f(proj[0][0], shadowY, proj[0][1]); // close the fan
             glEnd();
-            glPopMatrix();
         }
-        glPopMatrix();
         
         glDisable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
         glDisable(GL_STENCIL_TEST);
         glEnable(GL_LIGHTING);
         
