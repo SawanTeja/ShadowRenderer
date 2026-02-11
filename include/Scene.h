@@ -137,6 +137,14 @@ private:
     GLuint floorTextureId;
     GLuint wallTextureId;
     GLuint loadTexture(const char* filename);
+
+    struct Tree {
+        Vector3 position;
+        float size;
+    };
+    std::vector<Tree> trees;
+    void generateTrees(int count);
+    void drawTree(const Tree& tree);
 };
 
 #endif // SCENE_H

@@ -392,13 +392,14 @@ void Scene::init() {
     glEnable(GL_LIGHT0);
     glEnable(GL_COLOR_MATERIAL);
     glEnable(GL_NORMALIZE);
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClearColor(0.53f, 0.81f, 0.92f, 1.0f);
 
     floorTextureId = loadTexture("textures/floor_texture.jpg");
     wallTextureId = loadTexture("textures/wall.jpg");
 
     // Add some default shapes
     addShape(SHAPE_CUBE, 0.0f, 0.0f, 1.0f);
+    generateTrees(50);
     lightActive = true;
 }
 
@@ -456,6 +457,11 @@ void Scene::render() {
         shape->draw();
     }
     
+    // Draw trees
+    for (const auto& t : trees) {
+        drawTree(t);
+    }
+    
     // Shadows
     if (lightActive) {
         glEnable(GL_STENCIL_TEST);
@@ -476,6 +482,11 @@ void Scene::render() {
              // generic shadow volume is robust. Here we are using projection.
              // We just project everything.
              shape->draw();
+        }
+        
+        // Tree shadows
+        for (const auto& t : trees) {
+            drawTree(t);
         }
         glPopMatrix();
         
@@ -679,9 +690,9 @@ void Scene::drawFloor() {
     if (floorTextureId != 0) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, floorTextureId);
-        glColor3f(1.0f, 1.0f, 1.0f);
+        glColor3f(0.5f, 1.0f, 0.5f);
     } else {
-        glColor3f(0.5f, 0.5f, 0.5f);
+        glColor3f(0.1f, 0.6f, 0.1f);
     }
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 1.0f, 0.0f);
@@ -717,5 +728,77 @@ void Scene::drawLightWireframe(const Vector3& pos, float size) {
         glVertex3f(ls, -ls, -ls); glVertex3f(ls, -ls, ls);
         glVertex3f(-ls, -ls, -ls); glVertex3f(-ls, -ls, ls);
     glEnd();
+    glEnd();
+    glPopMatrix();
+}
+
+void Scene::generateTrees(int count) {
+    trees.clear();
+    for (int i = 0; i < count; i++) {
+        Tree t;
+        // Random position between -40 and 40
+        float x = (rand() % 800) / 10.0f - 40.0f;
+        float z = (rand() % 800) / 10.0f - 40.0f;
+        
+        // Avoid center area
+        if (x > -5 && x < 5 && z > -5 && z < 5) continue;
+        
+        t.position = Vector3(x, 0.0f, z);
+        t.size = (rand() % 100) / 100.0f * 0.5f + 0.5f; // 0.5 to 1.0 variation
+        trees.push_back(t);
+    }
+}
+
+void Scene::drawTree(const Tree& tree) {
+    glPushMatrix();
+    glTranslatef(tree.position.x, tree.position.y, tree.position.z);
+    
+    // Trunk
+    glColor3f(0.55f, 0.27f, 0.07f);
+    float r = tree.size * 0.2f;
+    float h = tree.size * 1.5f;
+    
+    glBegin(GL_QUAD_STRIP);
+    for(int i=0; i<=8; i++) {
+        float angle = 2.0f * M_PI * i / 8;
+        float x = cos(angle) * r;
+        float z = sin(angle) * r;
+        glNormal3f(cos(angle), 0.0f, sin(angle));
+        glVertex3f(x, h, z);
+        glVertex3f(x, 0.0f, z);
+    }
+    glEnd();
+    
+    // Leaves (Cone)
+    glColor3f(0.0f, 0.8f, 0.0f); // Brighter green for leaves
+    float r_cone = tree.size * 0.8f;
+    float h_cone = tree.size * 2.5f;
+    float y_base = h * 0.8f; // Overlap slightly
+    
+    // Cone Sides
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex3f(0.0f, y_base + h_cone, 0.0f); // Top
+    for(int i=0; i<=8; i++) {
+        float angle = 2.0f * M_PI * i / 8;
+        float x = cos(angle) * r_cone;
+        float z = sin(angle) * r_cone;
+        // Normal could be improved
+        glNormal3f(x, 0.5f, z); 
+        glVertex3f(x, y_base, z);
+    }
+    glEnd();
+    
+    // Cone Base
+    glBegin(GL_TRIANGLE_FAN);
+    glNormal3f(0, -1, 0);
+    glVertex3f(0.0f, y_base, 0.0f);
+    for(int i=8; i>=0; i--) {
+        float angle = 2.0f * M_PI * i / 8;
+        float x = cos(angle) * r_cone;
+        float z = sin(angle) * r_cone;
+        glVertex3f(x, y_base, z);
+    }
+    glEnd();
+    
     glPopMatrix();
 }
