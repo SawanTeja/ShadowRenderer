@@ -1,152 +1,69 @@
 #include "ShadowSystem.h"
-#include <cmath>
-#include <algorithm>
+#include <iostream>
 
-ShadowSystem::ShadowSystem(int resolution, float worldSize)
-    : resolution(resolution), worldSize(worldSize) {
-    shadowMap.resize(resolution * resolution, 0.0f);
-}
+ShadowSystem::ShadowSystem() {}
 
-ShadowSystem::~ShadowSystem() {
-}
+ShadowSystem::~ShadowSystem() {}
 
 // ================================================================
-// Main shadow computation
+// Render shadows using stencil buffer planar projection
 // ================================================================
-void ShadowSystem::compute(const Vector3& lightPos,
-                            const std::function<float(float, float)>& getHeight,
-                            const std::vector<Caster>& casters) {
-    float cellSize = (2.0f * worldSize) / (resolution - 1);
+void ShadowSystem::renderShadows(const Vector3& lightPos, const std::function<void()>& drawOccluders) {
+    // 1. Disable writing to color/depth buffers, enable stencil writing
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_EQUAL, 1, 0xFF); // Pass if stencil value is 1 (floor)
+    glStencilOp(GL_KEEP, GL_KEEP, GL_INCR); // Increment stencil value to 2 where shadow is
+    
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glDepthMask(GL_FALSE);
+    
+    // Prevent z-fighting with the floor
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1.0f, -1.0f);
 
-    for (int iz = 0; iz < resolution; iz++) {
-        for (int ix = 0; ix < resolution; ix++) {
-            float wx = -worldSize + ix * cellSize;
-            float wz = -worldSize + iz * cellSize;
-            float wy = getHeight(wx, wz);
+    // 2. Render shadow volumes (projected geometry)
+    glPushMatrix();
+    Matrix4 shadowMat = Matrix4::shadow(lightPos, 0.0f); // Project onto Y=0
+    glMultMatrixf(shadowMat.data());
 
-            float shadow = 0.0f;
-
-            // Check terrain self-occlusion (hills blocking sunlight)
-            if (isOccludedByTerrain(wx, wy, wz, lightPos, getHeight)) {
-                shadow = 1.0f;
-            }
-            // Check object/tree occlusion
-            else if (isOccludedByCaster(wx, wy, wz, lightPos, casters)) {
-                shadow = 1.0f;
-            }
-
-            shadowMap[iz * resolution + ix] = shadow;
-        }
-    }
-}
-
-// ================================================================
-// Terrain self-shadowing: march from vertex toward light,
-// check if terrain height exceeds ray height at any point
-// ================================================================
-bool ShadowSystem::isOccludedByTerrain(float px, float py, float pz,
-                                        const Vector3& lightPos,
-                                        const std::function<float(float, float)>& getHeight) const {
-    float dx = lightPos.x - px;
-    float dy = lightPos.y - py;
-    float dz = lightPos.z - pz;
-    float dist = sqrt(dx * dx + dy * dy + dz * dz);
-    if (dist < 0.1f) return false;
-
-    // Normalize direction
-    dx /= dist; dy /= dist; dz /= dist;
-
-    // March in fixed steps toward the light
-    int numSteps = 25;
-    float maxDist = std::min(dist, worldSize * 0.8f);
-    float stepSize = maxDist / numSteps;
-
-    for (int i = 1; i < numSteps; i++) {
-        float t = i * stepSize;
-        float sx = px + dx * t;
-        float sy = py + dy * t;
-        float sz = pz + dz * t;
-
-        // Stay within terrain bounds
-        if (sx < -worldSize || sx > worldSize || sz < -worldSize || sz > worldSize)
-            break;
-
-        float terrainH = getHeight(sx, sz);
-        if (terrainH > sy + 0.15f) {
-            return true; // Terrain blocks the light
-        }
+    // Clean up state for drawing shapes as flat silhouettes if needed, 
+    // but usually lighting is disabled in scene render before calling this if strictly drawing shadow volume.
+    // However, here we just project the geometry. Use black color just in case (though ColorMask is false).
+    if (drawOccluders) {
+        drawOccluders();
     }
 
-    return false;
-}
+    glPopMatrix();
+    
+    // 3. Render the shadow overlay
+    // Enable color writing again
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    
+    // Draw a semi-transparent quad where stencil value is 2 (Floor + Shadow)
+    glStencilFunc(GL_EQUAL, 2, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_LIGHTING); // Shadows are just dark overlays
+    
+    glColor4f(0.0f, 0.0f, 0.0f, 0.35f); // Shadow color/intensity
 
-// ================================================================
-// Object occlusion: cast ray from terrain point to light,
-// check if any AABB shadow caster blocks the ray
-// ================================================================
-bool ShadowSystem::isOccludedByCaster(float px, float py, float pz,
-                                       const Vector3& lightPos,
-                                       const std::vector<Caster>& casters) const {
-    // Ray from terrain surface toward light
-    float origin[3] = { px, py + 0.05f, pz }; // Tiny offset above surface
-    float dir[3] = {
-        lightPos.x - px,
-        lightPos.y - py,
-        lightPos.z - pz
-    };
-    float dist = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
-    if (dist < 0.01f) return false;
+    // Draw full screen quad (conceptually covering the world)
+    // Since we are in 3D space, we draw a large quad over the floor.
+    // The stencil test ensures it only draws on the shadowed floor areas.
+    float sz = 200.0f; // Sufficiently large
+    glBegin(GL_QUADS);
+        glVertex3f(-sz, 0.0f, sz);
+        glVertex3f( sz, 0.0f, sz);
+        glVertex3f( sz, 0.0f, -sz);
+        glVertex3f(-sz, 0.0f, -sz);
+    glEnd();
 
-    dir[0] /= dist;
-    dir[1] /= dist;
-    dir[2] /= dist;
-
-    for (const auto& c : casters) {
-        float t;
-        if (rayIntersectsAABB(origin, dir,
-                               c.center.x - c.halfExtents.x,
-                               c.center.y - c.halfExtents.y,
-                               c.center.z - c.halfExtents.z,
-                               c.center.x + c.halfExtents.x,
-                               c.center.y + c.halfExtents.y,
-                               c.center.z + c.halfExtents.z,
-                               t)) {
-            if (t > 0.0f && t < dist) {
-                return true; // Object blocks the light
-            }
-        }
-    }
-
-    return false;
-}
-
-// ================================================================
-// Bilinear interpolation of shadow value at any world position
-// ================================================================
-float ShadowSystem::getShadowAt(float worldX, float worldZ) const {
-    float cellSize = (2.0f * worldSize) / (resolution - 1);
-    float gx = (worldX + worldSize) / cellSize;
-    float gz = (worldZ + worldSize) / cellSize;
-
-    // Clamp
-    if (gx < 0.0f) gx = 0.0f;
-    if (gx >= resolution - 1) gx = (float)(resolution - 2);
-    if (gz < 0.0f) gz = 0.0f;
-    if (gz >= resolution - 1) gz = (float)(resolution - 2);
-
-    int ix = (int)floor(gx);
-    int iz = (int)floor(gz);
-    float fx = gx - ix;
-    float fz = gz - iz;
-
-    // Bilinear interpolation of shadow values
-    float s00 = shadowMap[iz * resolution + ix];
-    float s10 = shadowMap[iz * resolution + ix + 1];
-    float s01 = shadowMap[(iz + 1) * resolution + ix];
-    float s11 = shadowMap[(iz + 1) * resolution + ix + 1];
-
-    float s0 = s00 + (s10 - s00) * fx;
-    float s1 = s01 + (s11 - s01) * fx;
-
-    return s0 + (s1 - s0) * fz;
+    // Restore state
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_BLEND);
+    glEnable(GL_LIGHTING);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_STENCIL_TEST);
 }
