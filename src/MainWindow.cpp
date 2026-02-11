@@ -105,6 +105,15 @@ void MainWindow::on_realize(GtkGLArea* area, gpointer data) {
     if (gtk_gl_area_get_error(area) != NULL) return;
     
     mw->scene->init();
+    
+    // Debug: Print GPU info
+    const GLubyte* renderer = glGetString(GL_RENDERER);
+    const GLubyte* vendor = glGetString(GL_VENDOR);
+    const GLubyte* version = glGetString(GL_VERSION);
+    
+    if (renderer) std::cout << "Renderer: " << renderer << std::endl;
+    if (vendor) std::cout << "Vendor: " << vendor << std::endl;
+    if (version) std::cout << "OpenGL Version: " << version << std::endl;
 }
 
 gboolean MainWindow::on_render(GtkGLArea* area, GdkGLContext* context, gpointer data) {
