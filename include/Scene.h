@@ -30,6 +30,7 @@ public:
 
     virtual void draw() const = 0;
     virtual void drawWireframe() const = 0;
+    virtual ShapeType getType() const = 0;
     
     // Returns t if hit, or -1 if no hit. origin and dir are in world space.
     virtual float intersect(const float origin[3], const float dir[3]) const = 0;
@@ -40,6 +41,7 @@ public:
     Cube(const Vector3& pos, const Vector3& col, float s) : Shape(pos, col, s) {}
     void draw() const override;
     void drawWireframe() const override;
+    ShapeType getType() const override { return SHAPE_CUBE; }
     float intersect(const float origin[3], const float dir[3]) const override;
 };
 
@@ -48,6 +50,7 @@ public:
     Sphere(const Vector3& pos, const Vector3& col, float s) : Shape(pos, col, s) {}
     void draw() const override;
     void drawWireframe() const override;
+    ShapeType getType() const override { return SHAPE_SPHERE; }
     float intersect(const float origin[3], const float dir[3]) const override;
 };
 
@@ -56,6 +59,7 @@ public:
     Cylinder(const Vector3& pos, const Vector3& col, float s) : Shape(pos, col, s) {}
     void draw() const override;
     void drawWireframe() const override;
+    ShapeType getType() const override { return SHAPE_CYLINDER; }
     float intersect(const float origin[3], const float dir[3]) const override;
 };
 
@@ -67,6 +71,7 @@ public:
         : Shape(pos, col, s), segments(segs) {}
     void draw() const override;
     void drawWireframe() const override;
+    ShapeType getType() const override { return (segments <= 3) ? SHAPE_TRICONE : SHAPE_CONE; }
     float intersect(const float origin[3], const float dir[3]) const override;
 };
 
@@ -104,6 +109,8 @@ public:
     void moveSelectedShape(float dx, float dz); // Relative move
     int  shapeCount() const;
     Vector3 getShapePosition(int index) const;
+    ShapeType getShapeType(int index) const;
+    void changeShapeType(int index, ShapeType newType);
 
     // Physics Access
     PhysicsEngine* getPhysicsEngine() const { return physicsEngine; }

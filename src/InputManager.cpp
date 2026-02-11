@@ -112,12 +112,33 @@ void InputManager::updatePhysicsAcceleration() {
 }
 
 gboolean InputManager::on_scroll(GtkWidget* widget, GdkEventScroll* event) {
-    if (event->direction == GDK_SCROLL_UP) {
-        scene->zoomCamera(1.0f);
-    } else if (event->direction == GDK_SCROLL_DOWN) {
-        scene->zoomCamera(-1.0f);
+    int sel = scene->getSelected();
+    int lightIdx = scene->shapeCount();
+
+    // If a shape (not the light) is selected, cycle its type
+    if (sel >= 0 && sel < lightIdx) {
+        const int NUM_TYPES = 5; // SHAPE_CUBE..SHAPE_TRICONE
+        int current = (int)scene->getShapeType(sel);
+        int next = current;
+
+        if (event->direction == GDK_SCROLL_UP) {
+            next = (current + 1) % NUM_TYPES;
+        } else if (event->direction == GDK_SCROLL_DOWN) {
+            next = (current - 1 + NUM_TYPES) % NUM_TYPES;
+        }
+
+        if (next != current) {
+            scene->changeShapeType(sel, (ShapeType)next);
+        }
+    } else {
+        // No shape selected — zoom camera as before
+        if (event->direction == GDK_SCROLL_UP) {
+            scene->zoomCamera(1.0f);
+        } else if (event->direction == GDK_SCROLL_DOWN) {
+            scene->zoomCamera(-1.0f);
+        }
     }
-    
+
     gtk_widget_queue_draw(widget);
     return TRUE;
 }

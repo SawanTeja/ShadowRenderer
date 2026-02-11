@@ -659,6 +659,44 @@ Vector3 Scene::getShapePosition(int index) const {
     return Vector3();
 }
 
+ShapeType Scene::getShapeType(int index) const {
+    if (index >= 0 && index < (int)shapes.size()) {
+        return shapes[index]->getType();
+    }
+    return SHAPE_CUBE;
+}
+
+void Scene::changeShapeType(int index, ShapeType newType) {
+    if (index < 0 || index >= (int)shapes.size()) return;
+
+    Shape* old = shapes[index];
+    Vector3 pos = old->position;
+    Vector3 col = old->color;
+    float sz = old->size;
+
+    // Create new shape of the target type
+    Shape* newShape = nullptr;
+    switch(newType) {
+        case SHAPE_CUBE:     newShape = new Cube(pos, col, sz); break;
+        case SHAPE_SPHERE:   newShape = new Sphere(pos, col, sz); break;
+        case SHAPE_CYLINDER: newShape = new Cylinder(pos, col, sz); break;
+        case SHAPE_CONE:     newShape = new Cone(pos, col, sz, 32); break;
+        case SHAPE_TRICONE:  newShape = new Cone(pos, col, sz, 3); break;
+    }
+    if (!newShape) return;
+
+    // Transfer physics mapping
+    auto it = physicsMap.find(old);
+    if (it != physicsMap.end()) {
+        PhysicsObject* physObj = it->second;
+        physicsMap.erase(it);
+        physicsMap[newShape] = physObj;
+    }
+
+    shapes[index] = newShape;
+    delete old;
+}
+
 void Scene::moveSelectedShape(float dx, float dz) {
     
     if (selectedIndex >= 0 && selectedIndex < (int)shapes.size()) {
