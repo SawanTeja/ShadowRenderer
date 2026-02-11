@@ -4,6 +4,7 @@
 #include <vector>
 #include <GL/gl.h>
 #include "MathUtils.h"
+#include "Camera.h"
 
 // Enum for Shape Type
 enum ShapeType {
@@ -100,6 +101,9 @@ public:
     void moveSelectedShape(float dx, float dz); // Relative move
     int  shapeCount() const;
     Vector3 getShapePosition(int index) const;
+    
+    // Camera Access
+    Camera* getCamera() const;
 
 private:
     struct Light {
@@ -112,12 +116,10 @@ private:
     bool lightActive;
     
     // Camera State
-    float cameraYaw;      // Horizontal rotation (radians)
-    float cameraPitch;    // Vertical rotation (radians)
-    float cameraDistance; // Distance from center
+    Camera* camera;
     
     int selectedIndex;  // -1 = none
-    
+
     void drawFloor();
     void drawWall();
     void drawLightWireframe(const Vector3& pos, float size);

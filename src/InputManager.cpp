@@ -135,10 +135,12 @@ gboolean InputManager::on_button_press(GtkWidget* widget, GdkEventButton* event)
     // This requires asking MainWindow. 
     // Let's assume we can get these from MainWindow.
     
+    Vector3 target = scene->getCamera()->getTarget();
+
     if (mainWindow->isLightMode()) {
         float defaultLightY = 3.0f;
         float worldX, worldZ;
-        if (unprojectScreenToFloor(screenX, screenY, defaultLightY, w, h, eyeX, eyeY, eyeZ, worldX, worldZ)) {
+        if (unprojectScreenToFloor(screenX, screenY, defaultLightY, w, h, eyeX, eyeY, eyeZ, target.x, target.y, target.z, worldX, worldZ)) {
             scene->setLightWorldPos(worldX, defaultLightY, worldZ);
             scene->setSelected(scene->shapeCount());
             dragIndex = scene->shapeCount();
@@ -151,7 +153,7 @@ gboolean InputManager::on_button_press(GtkWidget* widget, GdkEventButton* event)
         ShapeType type = mainWindow->getSelectedShapeType();
         
         float worldX, worldZ;
-        if (unprojectScreenToFloor(screenX, screenY, 0.0f, w, h, eyeX, eyeY, eyeZ, worldX, worldZ)) {
+        if (unprojectScreenToFloor(screenX, screenY, 0.0f, w, h, eyeX, eyeY, eyeZ, target.x, target.y, target.z, worldX, worldZ)) {
             scene->addShapeAt(type, worldX, worldZ, color.x, color.y, color.z);
             gtk_widget_queue_draw(widget);
         }
@@ -212,7 +214,8 @@ gboolean InputManager::on_motion_notify(GtkWidget* widget, GdkEventMotion* event
     scene->getCameraPosition(eyeX, eyeY, eyeZ);
     
     float worldX, worldZ;
-    if (unprojectScreenToFloor(screenX, screenY, dragPlaneY, w, h, eyeX, eyeY, eyeZ, worldX, worldZ)) {
+    Vector3 target = scene->getCamera()->getTarget();
+    if (unprojectScreenToFloor(screenX, screenY, dragPlaneY, w, h, eyeX, eyeY, eyeZ, target.x, target.y, target.z, worldX, worldZ)) {
         int lightIdx = scene->shapeCount();
         if (dragIndex == lightIdx) {
             scene->setLightWorldPos(worldX, dragPlaneY, worldZ);

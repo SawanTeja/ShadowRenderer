@@ -121,6 +121,7 @@ struct Matrix4 {
 inline bool unprojectScreenToFloor(float screenX, float screenY,
                                     float planeY, int viewportW, int viewportH,
                                     float eyeX, float eyeY, float eyeZ,
+                                    float targetX, float targetY, float targetZ,
                                     float& outX, float& outZ) {
     // Camera parameters
     float fovY = 45.0f;
@@ -130,9 +131,9 @@ inline bool unprojectScreenToFloor(float screenX, float screenY,
     float ndcX = screenX * 2.0f - 1.0f;   // -1 (left) to +1 (right)
     float ndcY = 1.0f - screenY * 2.0f;    // -1 (bottom) to +1 (top), flip Y
 
-    // Compute camera basis vectors (same as lookAt with target (0,0,0), up (0,1,0))
+    // Compute camera basis vectors (same as lookAt with target, up (0,1,0))
     // Forward = normalize(target - eye)
-    float fx = 0.0f - eyeX, fy = 0.0f - eyeY, fz = 0.0f - eyeZ;
+    float fx = targetX - eyeX, fy = targetY - eyeY, fz = targetZ - eyeZ;
     float fLen = std::sqrt(fx*fx + fy*fy + fz*fz);
     fx /= fLen; fy /= fLen; fz /= fLen;
 
@@ -176,6 +177,7 @@ inline bool unprojectScreenToFloor(float screenX, float screenY,
 inline void buildScreenRay(float screenX, float screenY,
                            int viewportW, int viewportH,
                            float eyeX, float eyeY, float eyeZ,
+                           float targetX, float targetY, float targetZ,
                            float outOrigin[3], float outDir[3]) {
     float fovY = 45.0f;
     float aspect = (float)viewportW / (float)viewportH;
@@ -184,7 +186,7 @@ inline void buildScreenRay(float screenX, float screenY,
     float ndcY = 1.0f - screenY * 2.0f;
 
     // Camera basis vectors (target = origin, up = Y)
-    float fx = 0.0f - eyeX, fy = 0.0f - eyeY, fz = 0.0f - eyeZ;
+    float fx = targetX - eyeX, fy = targetY - eyeY, fz = targetZ - eyeZ;
     float fLen = std::sqrt(fx*fx + fy*fy + fz*fz);
     fx /= fLen; fy /= fLen; fz /= fLen;
 
