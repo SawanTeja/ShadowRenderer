@@ -37,6 +37,7 @@ private:
     static void on_realize(GtkGLArea* area, gpointer data);
     static gboolean on_render(GtkGLArea* area, GdkGLContext* context, gpointer data);
     static gboolean on_resize(GtkGLArea* area, gint width, gint height, gpointer data);
+    static gboolean on_tick(gpointer data);
 
 };
 

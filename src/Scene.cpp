@@ -355,12 +355,16 @@ Scene::Scene() : lightActive(false), selectedIndex(-1), floorTextureId(0), wallT
     // Default light
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
+    
+    physicsEngine = new PhysicsEngine();
 }
 
 Scene::~Scene() {
     delete camera;
+    delete physicsEngine;
     for(auto s : shapes) delete s;
     shapes.clear();
+    physicsMap.clear();
 }
 
 GLuint Scene::loadTexture(const char* filename) {
@@ -405,6 +409,18 @@ void Scene::resize(int width, int height) {
     glLoadIdentity();
     MathGL::perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
     glMatrixMode(GL_MODELVIEW);
+}
+
+void Scene::update(float dt) {
+    physicsEngine->update(dt);
+    
+    // Sync graphical shapes with physics objects
+    for (auto shape : shapes) {
+        if (physicsMap.find(shape) != physicsMap.end()) {
+            PhysicsObject* physObj = physicsMap[shape];
+            shape->position = physObj->position;
+        }
+    }
 }
 
 void Scene::render() {
@@ -537,6 +553,18 @@ void Scene::addShapeAt(ShapeType type, float x, float z, float r, float g, float
     
     if (newShape) {
         shapes.push_back(newShape);
+        
+        // Add to physics engine
+        PhysicsObject* physObj = physicsEngine->addObject(pos);
+        // Default properties for now
+        physObj->mass = 1.0f;
+        physObj->friction = 2.0f; // Reasonable friction
+        
+        if (type == SHAPE_CUBE) {
+             // Maybe give cube different properties?
+        }
+        
+        physicsMap[newShape] = physObj;
     }
 }
 
@@ -619,10 +647,30 @@ Vector3 Scene::getShapePosition(int index) const {
 }
 
 void Scene::moveSelectedShape(float dx, float dz) {
+    
     if (selectedIndex >= 0 && selectedIndex < (int)shapes.size()) {
-        shapes[selectedIndex]->position.x += dx;
-        shapes[selectedIndex]->position.z += dz;
+        PhysicsObject* physObj = getPhysicsObject(selectedIndex);
+        if (physObj) {
+            physObj->position.x += dx;
+            physObj->position.z += dz;
+            // Reset velocity/accel if manually moved?
+            physObj->velocity = Vector3(0,0,0);
+            physObj->acceleration = Vector3(0,0,0);
+        } else {
+            shapes[selectedIndex]->position.x += dx;
+            shapes[selectedIndex]->position.z += dz;
+        }
     }
+}
+
+PhysicsObject* Scene::getPhysicsObject(int index) {
+    if (index >= 0 && index < (int)shapes.size()) {
+        Shape* s = shapes[index];
+        if (physicsMap.find(s) != physicsMap.end()) {
+            return physicsMap[s];
+        }
+    }
+    return nullptr;
 }
 
 void Scene::drawFloor() {

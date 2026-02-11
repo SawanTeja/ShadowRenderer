@@ -75,7 +75,12 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), inputManager(n
     g_signal_connect(gl_area, "button-press-event", G_CALLBACK(InputManager::on_button_press_callback), inputManager);
     g_signal_connect(gl_area, "button-release-event", G_CALLBACK(InputManager::on_button_release_callback), inputManager);
     g_signal_connect(gl_area, "scroll-event", G_CALLBACK(InputManager::on_scroll_callback), inputManager);
+    g_signal_connect(gl_area, "scroll-event", G_CALLBACK(InputManager::on_scroll_callback), inputManager);
     g_signal_connect(window, "key-press-event", G_CALLBACK(InputManager::on_key_press_callback), inputManager); // Window handles keys
+    g_signal_connect(window, "key-release-event", G_CALLBACK(InputManager::on_key_release_callback), inputManager);
+    
+    // Game Loop (approx 60 FPS)
+    g_timeout_add(16, (GSourceFunc)on_tick, this);
 }
 
 MainWindow::~MainWindow() {
@@ -155,5 +160,13 @@ gboolean MainWindow::on_resize(GtkGLArea* area, gint width, gint height, gpointe
     MainWindow* mw = static_cast<MainWindow*>(data);
     mw->scene->resize(width, height);
     return TRUE;
+}
+
+gboolean MainWindow::on_tick(gpointer data) {
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    // DT is fixed 0.016f for now, or calculate real dt
+    mw->scene->update(0.016f);
+    gtk_widget_queue_draw(mw->gl_area);
+    return TRUE; // Continue calling
 }
 

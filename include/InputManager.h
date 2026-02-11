@@ -13,6 +13,7 @@ public:
 
     // Event Handlers
     gboolean on_key_press(GtkWidget* widget, GdkEventKey* event);
+    gboolean on_key_release(GtkWidget* widget, GdkEventKey* event);
     gboolean on_motion_notify(GtkWidget* widget, GdkEventMotion* event);
     gboolean on_button_press(GtkWidget* widget, GdkEventButton* event);
     gboolean on_button_release(GtkWidget* widget, GdkEventButton* event);
@@ -20,6 +21,7 @@ public:
 
     // Callbacks to hook into GTK signals (static wrappers)
     static gboolean on_key_press_callback(GtkWidget* widget, GdkEventKey* event, gpointer data);
+    static gboolean on_key_release_callback(GtkWidget* widget, GdkEventKey* event, gpointer data);
     static gboolean on_motion_notify_callback(GtkWidget* widget, GdkEventMotion* event, gpointer data);
     static gboolean on_button_press_callback(GtkWidget* widget, GdkEventButton* event, gpointer data);
     static gboolean on_button_release_callback(GtkWidget* widget, GdkEventButton* event, gpointer data);

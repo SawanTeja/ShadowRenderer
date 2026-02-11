@@ -5,6 +5,8 @@
 #include <GL/gl.h>
 #include "MathUtils.h"
 #include "Camera.h"
+#include "Physics/PhysicsEngine.h"
+#include <map>
 
 // Enum for Shape Type
 enum ShapeType {
@@ -74,6 +76,7 @@ public:
     ~Scene();
 
     void init();
+    void update(float dt);
     void render();
     void resize(int width, int height);
 
@@ -101,6 +104,10 @@ public:
     void moveSelectedShape(float dx, float dz); // Relative move
     int  shapeCount() const;
     Vector3 getShapePosition(int index) const;
+
+    // Physics Access
+    PhysicsEngine* getPhysicsEngine() const { return physicsEngine; }
+    PhysicsObject* getPhysicsObject(int index);
     
     // Camera Access
     Camera* getCamera() const;
@@ -119,6 +126,9 @@ private:
     Camera* camera;
     
     int selectedIndex;  // -1 = none
+    
+    PhysicsEngine* physicsEngine;
+    std::map<Shape*, PhysicsObject*> physicsMap;
 
     void drawFloor();
     void drawWall();

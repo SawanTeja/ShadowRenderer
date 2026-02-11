@@ -15,6 +15,10 @@ gboolean InputManager::on_key_press_callback(GtkWidget* widget, GdkEventKey* eve
     return static_cast<InputManager*>(data)->on_key_press(widget, event);
 }
 
+gboolean InputManager::on_key_release_callback(GtkWidget* widget, GdkEventKey* event, gpointer data) {
+    return static_cast<InputManager*>(data)->on_key_release(widget, event);
+}
+
 gboolean InputManager::on_motion_notify_callback(GtkWidget* widget, GdkEventMotion* event, gpointer data) {
     return static_cast<InputManager*>(data)->on_motion_notify(widget, event);
 }
@@ -35,74 +39,70 @@ gboolean InputManager::on_scroll_callback(GtkWidget* widget, GdkEventScroll* eve
 
 gboolean InputManager::on_key_press(GtkWidget* widget, GdkEventKey* event) {
     // WASD Control
-    if (scene->getSelected() == -1) return FALSE; // Let default handling happen if nothing selected
+    if (scene->getSelected() == -1) return FALSE; 
 
-    float speed = 0.5f;
-    float dx = 0.0f;
-    float dz = 0.0f;
+    PhysicsObject* physObj = scene->getPhysicsObject(scene->getSelected());
+    if (!physObj) return FALSE;
+
+    float acceleration = 10.0f; // Force/Acceleration magnitude
+    float ax = 0.0f;
+    float az = 0.0f;
 
     // Get Camera Yaw
     float yaw = scene->getCamera()->getYaw();
     
     // Calculate Forward and Right vectors on XZ plane
-    // Camera pos relative to target is (sin(yaw), ..., cos(yaw))
-    // So looking towards target is (-sin(yaw), ..., -cos(yaw))
     float fwdX = -sin(yaw);
     float fwdZ = -cos(yaw);
-    
-    // Right vector is perpendicular (cross product with up (0,1,0))
-    // (fwdX, 0, fwdZ) x (0, 1, 0) = (-fwdZ, 0, fwdX)
     float rightX = -fwdZ;
     float rightZ = fwdX;
 
     switch (event->keyval) {
         case GDK_KEY_w:
         case GDK_KEY_W:
-            // Forward
-            dx += fwdX * speed;
-            dz += fwdZ * speed;
+            ax += fwdX * acceleration;
+            az += fwdZ * acceleration;
             break;
         case GDK_KEY_s:
         case GDK_KEY_S:
-            // Backward
-            dx -= fwdX * speed;
-            dz -= fwdZ * speed;
+            ax -= fwdX * acceleration;
+            az -= fwdZ * acceleration;
             break;
         case GDK_KEY_a:
         case GDK_KEY_A:
-            // Left (Negative Right)
-            dx -= rightX * speed;
-            dz -= rightZ * speed;
+            ax -= rightX * acceleration;
+            az -= rightZ * acceleration;
             break;
         case GDK_KEY_d:
         case GDK_KEY_D:
-            // Right
-            dx += rightX * speed;
-            dz += rightZ * speed;
+            ax += rightX * acceleration;
+            az += rightZ * acceleration;
             break;
         default:
             return FALSE;
     }
 
-    if (dx != 0.0f || dz != 0.0f) {
-        scene->moveSelectedShape(dx, dz);
-        gtk_widget_queue_draw(widget);
+    if (ax != 0.0f || az != 0.0f) {
+        
+        physObj->acceleration.x = ax;
+        physObj->acceleration.z = az;
+        
         return TRUE;
     }
 
     return FALSE;
 }
 
+gboolean InputManager::on_key_release(GtkWidget* widget, GdkEventKey* event) {
+    if (scene->getSelected() == -1) return FALSE;
+    PhysicsObject* physObj = scene->getPhysicsObject(scene->getSelected());
+    if (!physObj) return FALSE;
+    physObj->acceleration = Vector3(0,0,0);
+    
+    return TRUE;
+}
+
 gboolean InputManager::on_scroll(GtkWidget* widget, GdkEventScroll* event) {
-    // If view mode is NOT active, maybe we don't zoom? 
-    // The original code checked specific UI state for zoom. 
-    // For now, let's allow always zoom or check MainWindow state if we had access to check button.
-    // Original: if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mw->viewModeCheck))) return TRUE;
-    
-    // We can assume scroll is always zoom for now, or access MainWindow public method to check state.
-    // Let's implement public accessor in MainWindow later. For now, we'll just allow it or assume View Mode is managed there.
-    // Actually, to keep it clean, let's just zoom.
-    
     if (event->direction == GDK_SCROLL_UP) {
         scene->zoomCamera(1.0f);
     } else if (event->direction == GDK_SCROLL_DOWN) {
@@ -115,10 +115,6 @@ gboolean InputManager::on_scroll(GtkWidget* widget, GdkEventScroll* event) {
 
 gboolean InputManager::on_button_press(GtkWidget* widget, GdkEventButton* event) {
     if (event->button != 1) return TRUE;
-
-    // Check View Mode - requires callback to MainWindow or public getter
-    // For now, assuming if we are here, we might want to interact.
-    // Ideally MainWindow should decide whether to call this or not, OR we access MainWindow::isViewMode()
     
     if (mainWindow->isViewMode()) {
         return TRUE; 
@@ -152,10 +148,7 @@ gboolean InputManager::on_button_press(GtkWidget* widget, GdkEventButton* event)
     
     // Nothing hit -> Place Object (moved from MainWindow)
     scene->setSelected(-1);
-    
-    // We need to know if we are in Shape or Light mode, and what shape/color.
-    // This requires asking MainWindow. 
-    // Let's assume we can get these from MainWindow.
+
     
     Vector3 target = scene->getCamera()->getTarget();
 

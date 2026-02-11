@@ -15,7 +15,7 @@ include_directories(${OPENGL_INCLUDE_DIR})
 link_directories(${GTK3_LIBRARY_DIRS})
 add_definitions(${GTK3_CFLAGS_OTHER})
 
-file(GLOB SOURCES "src/*.cpp")
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 add_executable(Basic ${SOURCES})
 
