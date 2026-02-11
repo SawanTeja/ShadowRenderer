@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <map>
+#include <functional>
 #include "MathUtils.h"
 
 struct PhysicsObject {
@@ -32,6 +33,9 @@ public:
     
     // Remove object
     void removeObject(PhysicsObject* obj);
+
+    // Terrain height callback - set by Scene to enable terrain-aware collisions
+    std::function<float(float, float)> getTerrainHeight;
 
 private:
     std::vector<PhysicsObject*> objects;

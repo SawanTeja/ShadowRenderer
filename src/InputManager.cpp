@@ -198,6 +198,7 @@ gboolean InputManager::on_button_press(GtkWidget* widget, GdkEventButton* event)
         ShapeType type = mainWindow->getSelectedShapeType();
         
         float worldX, worldZ;
+        // Unproject to a flat reference plane first, then Scene::addShapeAt handles terrain height
         if (unprojectScreenToFloor(screenX, screenY, 0.0f, w, h, eyeX, eyeY, eyeZ, target.x, target.y, target.z, worldX, worldZ)) {
             scene->addShapeAt(type, worldX, worldZ, color.x, color.y, color.z);
             gtk_widget_queue_draw(widget);

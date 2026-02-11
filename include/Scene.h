@@ -4,6 +4,7 @@
 #include <vector>
 #include <GL/gl.h>
 #include "MathUtils.h"
+#include "Terrain.h"
 #include "Camera.h"
 #include "Physics/PhysicsEngine.h"
 #include <map>
@@ -88,6 +89,9 @@ public:
     void addShape(ShapeType type, float r, float g, float b);
     void addShapeAt(ShapeType type, float x, float z, float r, float g, float b);
 
+    // Terrain height query
+    float getTerrainHeight(float x, float z) const;
+
     // Camera Control
     void rotateCamera(float dx, float dy);
     void zoomCamera(float delta);
@@ -136,6 +140,7 @@ private:
     
     PhysicsEngine* physicsEngine;
     std::map<Shape*, PhysicsObject*> physicsMap;
+    Terrain* terrain;
 
     void drawFloor();
     void drawWall();

@@ -71,13 +71,19 @@ void PhysicsEngine::update(float dt) {
 }
 
 void PhysicsEngine::checkCollisions(float dt) {
-    // 1. Floor Collision
+    // 1. Terrain/Floor Collision
     for (auto obj : objects) {
-        if (obj->position.y - obj->size.y < 0.0f) {
-            obj->position.y = obj->size.y;
+        // Determine ground height at object's XZ position
+        float groundY = 0.0f;
+        if (getTerrainHeight) {
+            groundY = getTerrainHeight(obj->position.x, obj->position.z);
+        }
+
+        if (obj->position.y - obj->size.y < groundY) {
+            obj->position.y = groundY + obj->size.y;
             obj->velocity.y = -obj->velocity.y * 0.5f; // Bounce with damping
             
-            // Apply friction on floor
+            // Apply friction on ground
             obj->velocity.x *= 0.9f;
             obj->velocity.z *= 0.9f;
         }

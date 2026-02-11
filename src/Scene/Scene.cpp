@@ -351,17 +351,19 @@ float Cone::intersect(const float origin[3], const float dir[3]) const {
 // ==========================================
 
 Scene::Scene() : lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0),
-                 camera(new Camera()) {
+                 camera(new Camera()), terrain(nullptr) {
     // Default light
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
     
     physicsEngine = new PhysicsEngine();
+    terrain = new Terrain(50.0f, 128);
 }
 
 Scene::~Scene() {
     delete camera;
     delete physicsEngine;
+    delete terrain;
     for(auto s : shapes) delete s;
     shapes.clear();
     physicsMap.clear();
@@ -396,6 +398,14 @@ void Scene::init() {
 
     floorTextureId = loadTexture("textures/floor_texture.jpg");
     wallTextureId = loadTexture("textures/wall.jpg");
+
+    // Generate terrain
+    terrain->generate(42);
+
+    // Give the physics engine access to terrain height
+    physicsEngine->getTerrainHeight = [this](float x, float z) -> float {
+        return terrain->getHeight(x, z);
+    };
 
     // Add some default shapes
     addShape(SHAPE_CUBE, 0.0f, 0.0f, 1.0f);
@@ -549,9 +559,10 @@ void Scene::addShape(ShapeType type, float r, float g, float b) {
 }
 
 void Scene::addShapeAt(ShapeType type, float x, float z, float r, float g, float b) {
-    Vector3 pos(x, 0.5f, z);
-    Vector3 col(r, g, b);
+    float groundY = terrain ? terrain->getHeight(x, z) : 0.0f;
     float size = 0.5f;
+    Vector3 pos(x, groundY + size, z);
+    Vector3 col(r, g, b);
 
     Shape* newShape = nullptr;
     switch(type) {
@@ -595,6 +606,11 @@ void Scene::getCameraPosition(float& x, float& y, float& z) const {
 
 Camera* Scene::getCamera() const {
     return camera;
+}
+
+float Scene::getTerrainHeight(float x, float z) const {
+    if (terrain) return terrain->getHeight(x, z);
+    return 0.0f;
 }
 
 void Scene::setLightWorldPos(float x, float y, float z) {
@@ -725,23 +741,28 @@ PhysicsObject* Scene::getPhysicsObject(int index) {
 }
 
 void Scene::drawFloor() {
-    if (floorTextureId != 0) {
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, floorTextureId);
-        glColor3f(0.5f, 1.0f, 0.5f);
+    if (terrain) {
+        terrain->render(floorTextureId);
     } else {
-        glColor3f(0.1f, 0.6f, 0.1f);
+        // Fallback flat floor
+        if (floorTextureId != 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, floorTextureId);
+            glColor3f(0.5f, 1.0f, 0.5f);
+        } else {
+            glColor3f(0.1f, 0.6f, 0.1f);
+        }
+        glBegin(GL_QUADS);
+            glNormal3f(0.0f, 1.0f, 0.0f);
+            float sz = 100.0f;
+            float rep = 10.0f;
+            glTexCoord2f(0.0f, 0.0f); glVertex3f(-sz, 0.0f, sz);
+            glTexCoord2f(rep, 0.0f); glVertex3f( sz, 0.0f, sz);
+            glTexCoord2f(rep, rep); glVertex3f( sz, 0.0f, -sz);
+            glTexCoord2f(0.0f, rep); glVertex3f(-sz, 0.0f, -sz);
+        glEnd();
+        if (floorTextureId != 0) glDisable(GL_TEXTURE_2D);
     }
-    glBegin(GL_QUADS);
-        glNormal3f(0.0f, 1.0f, 0.0f);
-        float sz = 100.0f; // Large floor
-        float rep = 10.0f; // Texture repeats
-        glTexCoord2f(0.0f, 0.0f); glVertex3f(-sz, 0.0f, sz);
-        glTexCoord2f(rep, 0.0f); glVertex3f( sz, 0.0f, sz);
-        glTexCoord2f(rep, rep); glVertex3f( sz, 0.0f, -sz);
-        glTexCoord2f(0.0f, rep); glVertex3f(-sz, 0.0f, -sz);
-    glEnd();
-    if (floorTextureId != 0) glDisable(GL_TEXTURE_2D);
 }
 
 void Scene::drawWall() {
@@ -781,17 +802,17 @@ void Scene::generateTrees(int count) {
         // Avoid center area (keep spawn clear)
         if (x > -5 && x < 5 && z > -5 && z < 5) continue;
         
-        t.position = Vector3(x, 0.0f, z);
+        // Place tree on terrain surface
+        float groundY = terrain ? terrain->getHeight(x, z) : 0.0f;
+        t.position = Vector3(x, groundY, z);
         // Bigger trees: 1.5 to 3.0
         t.size = (rand() % 150) / 100.0f + 1.5f; 
         
         // Physics
         PhysicsObject* p = physicsEngine->addObject(t.position);
         p->isStatic = true;
-        // Approximation: trunk width is 0.2 * size, height is size * 1.5?
-        // Let's make the collision box roughly the size of the trunk
-        float trunkRadius = t.size * 0.3f; // Slightly wider for ease of hitting
-        float totalHeight = t.size * 5.0f; // Tall enough
+        float trunkRadius = t.size * 0.3f;
+        float totalHeight = t.size * 5.0f;
         p->size = Vector3(trunkRadius, totalHeight, trunkRadius);
         
         t.physObj = p;
