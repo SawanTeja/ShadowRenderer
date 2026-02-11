@@ -3,13 +3,43 @@
 #include <cmath>
 #include <iostream>
 
-Scene::Scene() : rotation(0.0f), lightActive(false), selectedIndex(-1) {
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+Scene::Scene() : rotation(0.0f), lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0) {
     // Default light color: warm white
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
 }
 
 Scene::~Scene() {
+}
+
+GLuint Scene::loadTexture(const char* filename) {
+    int width, height, nrChannels;
+    unsigned char *data = stbi_load(filename, &width, &height, &nrChannels, 0);
+    if (data) {
+        GLuint textureId;
+        glGenTextures(1, &textureId);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+        
+        // Set texture wrapping to GL_REPEAT (usually basic for floors/walls)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // Set texture filtering parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        int format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        
+        stbi_image_free(data);
+        std::cout << "Successfully loaded texture: " << filename << std::endl;
+        return textureId;
+    } else {
+        std::cout << "Failed to load texture: " << filename << std::endl;
+        return 0;
+    }
 }
 
 void Scene::init() {
@@ -26,6 +56,10 @@ void Scene::init() {
     glEnable(GL_NORMALIZE);
     
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+    // Load textures
+    floorTextureId = loadTexture("textures/floor_texture.jpg");
+    wallTextureId = loadTexture("textures/wall.jpg");
 
     // Add a default cube - Blue
     addCube(0.0f, 0.0f, 1.0f);
@@ -62,14 +96,14 @@ void Scene::render() {
         glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
     }
     
-    // ---- Step 1: Draw the floor AND mark it in stencil (stencil = 1) ----
+    // ---- Step 1: Draw the floor (with texture if avail) AND mark it in stencil (stencil = 1) ----
     glEnable(GL_STENCIL_TEST);
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     drawFloor();
     glDisable(GL_STENCIL_TEST);
     
-    // Draw wall and cubes (no stencil writes)
+    // Draw wall (with texture if avail) and cubes (no stencil writes)
     drawWall();
     for (const auto& cube : cubes) {
         drawCube(cube);
@@ -357,23 +391,45 @@ void Scene::drawCubeWireframe(const Vector3& pos, float size) {
 }
 
 void Scene::drawFloor() {
-    glColor3f(0.5f, 0.5f, 0.5f);
+    if (floorTextureId != 0) {
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, floorTextureId);
+        glColor3f(1.0f, 1.0f, 1.0f); // White so texture shows correctly
+    } else {
+        glColor3f(0.5f, 0.5f, 0.5f);
+    }
+
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 1.0f, 0.0f);
-        glVertex3f(-10.0f, 0.0f, 10.0f);
-        glVertex3f( 10.0f, 0.0f, 10.0f);
-        glVertex3f( 10.0f, 0.0f, -10.0f);
-        glVertex3f(-10.0f, 0.0f, -10.0f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, 0.0f, 10.0f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f( 10.0f, 0.0f, 10.0f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f( 10.0f, 0.0f, -10.0f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(-10.0f, 0.0f, -10.0f);
     glEnd();
+
+    if (floorTextureId != 0) {
+        glDisable(GL_TEXTURE_2D);
+    }
 }
 
 void Scene::drawWall() {
-    glColor3f(0.7f, 0.7f, 0.7f);
+    if (wallTextureId != 0) {
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, wallTextureId);
+        glColor3f(1.0f, 1.0f, 1.0f); // White so texture shows correctly
+    } else {
+        glColor3f(0.7f, 0.7f, 0.7f);
+    }
+
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 0.0f, 1.0f);
-        glVertex3f(-10.0f, 0.0f, -5.0f);
-        glVertex3f( 10.0f, 0.0f, -5.0f);
-        glVertex3f( 10.0f, 10.0f, -5.0f);
-        glVertex3f(-10.0f, 10.0f, -5.0f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, 0.0f, -5.0f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f( 10.0f, 0.0f, -5.0f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f( 10.0f, 10.0f, -5.0f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(-10.0f, 10.0f, -5.0f);
     glEnd();
+
+    if (wallTextureId != 0) {
+        glDisable(GL_TEXTURE_2D);
+    }
 }
