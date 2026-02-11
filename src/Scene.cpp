@@ -75,87 +75,73 @@ void Scene::render() {
         drawCube(cube);
     }
     
-    // ---- Step 2: Draw shadows using stencil buffer ----
-    if (lightActive) {
-        glEnable(GL_STENCIL_TEST);
-        // Only draw where stencil == 1 (the floor).
-        // On draw, increment stencil to 2 so the same pixel is never shaded twice.
-        glStencilFunc(GL_EQUAL, 1, 0xFF);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
-        
-        glDisable(GL_LIGHTING);
-        glDepthMask(GL_FALSE);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        
-        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
-        
-        const float wallZ = -5.0f;
-        const float shadowY = 0.005f;
-        bool lightInFront = (light.position.z > wallZ);
-        float lx = light.position.x, ly = light.position.y, lz = light.position.z;
-        
-        for (const auto& cube : cubes) {
-            // Wall occlusion: skip shadow if light and cube are on opposite sides of the wall
-            bool cubeInFront = (cube.position.z > wallZ);
-            if (lightInFront != cubeInFront) continue;
+        // ---- Step 2: Draw shadows using two-pass stencil technique ----
+        // Pass 1: Project shadow geometry into stencil only (no color/depth writes).
+        // Pass 2: Draw one floor quad with shadow color where stencil was marked.
+        // This gives correct shadow shapes AND zero fringes.
+        if (lightActive) {
+            const float wallZ = -5.0f;
+            bool lightInFront = (light.position.z > wallZ);
             
-            // Project 8 cube corners onto the shadow plane (y=shadowY) from the light
-            float s = cube.size;
-            float cx = cube.position.x, cy = cube.position.y, cz = cube.position.z;
-            float corners[8][3] = {
-                {cx-s, cy-s, cz-s}, {cx+s, cy-s, cz-s}, {cx+s, cy-s, cz+s}, {cx-s, cy-s, cz+s},
-                {cx-s, cy+s, cz-s}, {cx+s, cy+s, cz-s}, {cx+s, cy+s, cz+s}, {cx-s, cy+s, cz+s}
-            };
+            // --- Pass 1: write shadow shape into stencil ---
+            glEnable(GL_STENCIL_TEST);
+            glStencilFunc(GL_EQUAL, 1, 0xFF);        // Only on floor (stencil==1)
+            glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);  // Mark shadow pixels as 2
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // No color output
+            glDepthMask(GL_FALSE);                    // No depth writes
             
-            float proj[8][2]; // projected x, z on shadow plane
-            int count = 0;
-            float centX = 0, centZ = 0;
+            // Use polygon offset to resolve z-fighting with the floor
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(-1.0f, -1.0f);
+
+            glPushMatrix();
+            // Project to exactly y=0.0f (no manual offset)
+            Matrix4 shadowMat = Matrix4::shadow(light.position, 0.0f);
+            glMultMatrixf(shadowMat.data());
             
-            for (int i = 0; i < 8; i++) {
-                float dy = ly - corners[i][1];
-                if (dy < 0.001f) continue; // Light at or below this corner
-                float t = (ly - shadowY) / dy;
-                proj[count][0] = lx + (corners[i][0] - lx) * t;
-                proj[count][1] = lz + (corners[i][2] - lz) * t;
-                centX += proj[count][0];
-                centZ += proj[count][1];
-                count++;
+            for (const auto& cube : cubes) {
+                bool cubeInFront = (cube.position.z > wallZ);
+                if (lightInFront != cubeInFront) continue;
+                
+                glPushMatrix();
+                glTranslatef(cube.position.x, cube.position.y, cube.position.z);
+                float s = cube.size;
+                
+                glBegin(GL_QUADS);
+                    glVertex3f(-s, -s,  s); glVertex3f( s, -s,  s); glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
+                    glVertex3f(-s, -s, -s); glVertex3f(-s,  s, -s); glVertex3f( s,  s, -s); glVertex3f( s, -s, -s);
+                    glVertex3f(-s,  s, -s); glVertex3f(-s,  s,  s); glVertex3f( s,  s,  s); glVertex3f( s,  s, -s);
+                    glVertex3f(-s, -s, -s); glVertex3f( s, -s, -s); glVertex3f( s, -s,  s); glVertex3f(-s, -s,  s);
+                    glVertex3f( s, -s, -s); glVertex3f( s,  s, -s); glVertex3f( s,  s,  s); glVertex3f( s, -s,  s);
+                    glVertex3f(-s, -s, -s); glVertex3f(-s, -s,  s); glVertex3f(-s,  s,  s); glVertex3f(-s,  s, -s);
+                glEnd();
+                glPopMatrix();
             }
-            if (count < 3) continue;
+            glPopMatrix();
             
-            centX /= count;
-            centZ /= count;
+            // --- Pass 2: draw ONE quad with shadow color where stencil == 2 ---
+            glStencilFunc(GL_EQUAL, 2, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
             
-            // Sort projected points by angle around their centroid for a clean convex polygon
-            float angles[8];
-            for (int i = 0; i < count; i++) {
-                angles[i] = std::atan2(proj[i][1] - centZ, proj[i][0] - centX);
-            }
-            for (int i = 0; i < count - 1; i++) {
-                for (int j = i + 1; j < count; j++) {
-                    if (angles[j] < angles[i]) {
-                        float tmpA = angles[i]; angles[i] = angles[j]; angles[j] = tmpA;
-                        float tmpX = proj[i][0]; proj[i][0] = proj[j][0]; proj[j][0] = tmpX;
-                        float tmpZ = proj[i][1]; proj[i][1] = proj[j][1]; proj[j][1] = tmpZ;
-                    }
-                }
-            }
+            glDisable(GL_LIGHTING);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
             
-            // Draw as a single triangle fan — one clean polygon, no overlaps, no fringes
-            glBegin(GL_TRIANGLE_FAN);
-                glVertex3f(centX, shadowY, centZ);
-                for (int i = 0; i < count; i++) {
-                    glVertex3f(proj[i][0], shadowY, proj[i][1]);
-                }
-                glVertex3f(proj[0][0], shadowY, proj[0][1]); // close the fan
+            // Draw quad exactly at y=0.0f, relying on polygon offset
+            glBegin(GL_QUADS);
+                glVertex3f(-10.0f, 0.0f, 10.0f);
+                glVertex3f( 10.0f, 0.0f, 10.0f);
+                glVertex3f( 10.0f, 0.0f, -10.0f);
+                glVertex3f(-10.0f, 0.0f, -10.0f);
             glEnd();
-        }
-        
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
-        glDisable(GL_STENCIL_TEST);
-        glEnable(GL_LIGHTING);
+            
+            glDisable(GL_POLYGON_OFFSET_FILL);
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+            glDisable(GL_STENCIL_TEST);
+            glEnable(GL_LIGHTING);
         
         // Draw light source indicator (small yellow cube)
         glPushMatrix();
