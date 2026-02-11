@@ -97,6 +97,7 @@ public:
 
     // Move APIs
     void moveShape(int index, float x, float z);
+    void moveSelectedShape(float dx, float dz); // Relative move
     int  shapeCount() const;
     Vector3 getShapePosition(int index) const;
 

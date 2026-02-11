@@ -621,6 +621,13 @@ Vector3 Scene::getShapePosition(int index) const {
     return Vector3();
 }
 
+void Scene::moveSelectedShape(float dx, float dz) {
+    if (selectedIndex >= 0 && selectedIndex < (int)shapes.size()) {
+        shapes[selectedIndex]->position.x += dx;
+        shapes[selectedIndex]->position.z += dz;
+    }
+}
+
 void Scene::drawFloor() {
     if (floorTextureId != 0) {
         glEnable(GL_TEXTURE_2D);
@@ -631,30 +638,18 @@ void Scene::drawFloor() {
     }
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 1.0f, 0.0f);
-        glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, 0.0f, 10.0f);
-        glTexCoord2f(1.0f, 0.0f); glVertex3f( 10.0f, 0.0f, 10.0f);
-        glTexCoord2f(1.0f, 1.0f); glVertex3f( 10.0f, 0.0f, -10.0f);
-        glTexCoord2f(0.0f, 1.0f); glVertex3f(-10.0f, 0.0f, -10.0f);
+        float sz = 100.0f; // Large floor
+        float rep = 10.0f; // Texture repeats
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(-sz, 0.0f, sz);
+        glTexCoord2f(rep, 0.0f); glVertex3f( sz, 0.0f, sz);
+        glTexCoord2f(rep, rep); glVertex3f( sz, 0.0f, -sz);
+        glTexCoord2f(0.0f, rep); glVertex3f(-sz, 0.0f, -sz);
     glEnd();
     if (floorTextureId != 0) glDisable(GL_TEXTURE_2D);
 }
 
 void Scene::drawWall() {
-    if (wallTextureId != 0) {
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, wallTextureId);
-        glColor3f(1.0f, 1.0f, 1.0f);
-    } else {
-        glColor3f(0.7f, 0.7f, 0.7f);
-    }
-    glBegin(GL_QUADS);
-        glNormal3f(0.0f, 0.0f, 1.0f);
-        glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, 0.0f, -5.0f);
-        glTexCoord2f(1.0f, 0.0f); glVertex3f( 10.0f, 0.0f, -5.0f);
-        glTexCoord2f(1.0f, 1.0f); glVertex3f( 10.0f, 10.0f, -5.0f);
-        glTexCoord2f(0.0f, 1.0f); glVertex3f(-10.0f, 10.0f, -5.0f);
-    glEnd();
-    if (wallTextureId != 0) glDisable(GL_TEXTURE_2D);
+    // No walls
 }
 
 void Scene::drawLightWireframe(const Vector3& pos, float size) {
