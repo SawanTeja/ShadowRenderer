@@ -558,7 +558,9 @@ void Scene::addShapeAt(ShapeType type, float x, float z, float r, float g, float
         PhysicsObject* physObj = physicsEngine->addObject(pos);
         // Default properties for now
         physObj->mass = 1.0f;
+        physObj->mass = 1.0f;
         physObj->friction = 2.0f; // Reasonable friction
+        physObj->size = Vector3(size, size, size); // Set size
         
         if (type == SHAPE_CUBE) {
              // Maybe give cube different properties?
