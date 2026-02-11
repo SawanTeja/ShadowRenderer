@@ -4,7 +4,8 @@
 #include <iostream>
 
 InputManager::InputManager(Scene* s, MainWindow* mw) 
-    : scene(s), mainWindow(mw), dragIndex(-1), dragPlaneY(0.0f), prevMouseX(0), prevMouseY(0) {
+    : scene(s), mainWindow(mw), dragIndex(-1), dragPlaneY(0.0f), prevMouseX(0), prevMouseY(0),
+      isWDown(false), isADown(false), isSDown(false), isDDown(false) {
 }
 
 InputManager::~InputManager() {
@@ -38,15 +39,35 @@ gboolean InputManager::on_scroll_callback(GtkWidget* widget, GdkEventScroll* eve
 // Logic implementations
 
 gboolean InputManager::on_key_press(GtkWidget* widget, GdkEventKey* event) {
-    // WASD Control
-    if (scene->getSelected() == -1) return FALSE; 
+    switch (event->keyval) {
+        case GDK_KEY_w: case GDK_KEY_W: isWDown = true; break;
+        case GDK_KEY_s: case GDK_KEY_S: isSDown = true; break;
+        case GDK_KEY_a: case GDK_KEY_A: isADown = true; break;
+        case GDK_KEY_d: case GDK_KEY_D: isDDown = true; break;
+        default: return FALSE;
+    }
+    updatePhysicsAcceleration();
+    return TRUE;
+}
 
+gboolean InputManager::on_key_release(GtkWidget* widget, GdkEventKey* event) {
+    switch (event->keyval) {
+        case GDK_KEY_w: case GDK_KEY_W: isWDown = false; break;
+        case GDK_KEY_s: case GDK_KEY_S: isSDown = false; break;
+        case GDK_KEY_a: case GDK_KEY_A: isADown = false; break;
+        case GDK_KEY_d: case GDK_KEY_D: isDDown = false; break;
+        default: return FALSE;
+    }
+    updatePhysicsAcceleration();
+    return TRUE;
+}
+
+void InputManager::updatePhysicsAcceleration() {
+    if (scene->getSelected() == -1) return;
     PhysicsObject* physObj = scene->getPhysicsObject(scene->getSelected());
-    if (!physObj) return FALSE;
+    if (!physObj) return;
 
-    float acceleration = 10.0f; // Force/Acceleration magnitude
-    float ax = 0.0f;
-    float az = 0.0f;
+    float acceleration = 15.0f; // Tuned for better response
 
     // Get Camera Yaw
     float yaw = scene->getCamera()->getYaw();
@@ -56,50 +77,38 @@ gboolean InputManager::on_key_press(GtkWidget* widget, GdkEventKey* event) {
     float fwdZ = -cos(yaw);
     float rightX = -fwdZ;
     float rightZ = fwdX;
-
-    switch (event->keyval) {
-        case GDK_KEY_w:
-        case GDK_KEY_W:
-            ax += fwdX * acceleration;
-            az += fwdZ * acceleration;
-            break;
-        case GDK_KEY_s:
-        case GDK_KEY_S:
-            ax -= fwdX * acceleration;
-            az -= fwdZ * acceleration;
-            break;
-        case GDK_KEY_a:
-        case GDK_KEY_A:
-            ax -= rightX * acceleration;
-            az -= rightZ * acceleration;
-            break;
-        case GDK_KEY_d:
-        case GDK_KEY_D:
-            ax += rightX * acceleration;
-            az += rightZ * acceleration;
-            break;
-        default:
-            return FALSE;
-    }
-
-    if (ax != 0.0f || az != 0.0f) {
-        
-        physObj->acceleration.x = ax;
-        physObj->acceleration.z = az;
-        
-        return TRUE;
-    }
-
-    return FALSE;
-}
-
-gboolean InputManager::on_key_release(GtkWidget* widget, GdkEventKey* event) {
-    if (scene->getSelected() == -1) return FALSE;
-    PhysicsObject* physObj = scene->getPhysicsObject(scene->getSelected());
-    if (!physObj) return FALSE;
-    physObj->acceleration = Vector3(0,0,0);
     
-    return TRUE;
+    float ax = 0.0f;
+    float az = 0.0f;
+    
+    if (isWDown) {
+        ax += fwdX;
+        az += fwdZ;
+    }
+    if (isSDown) {
+        ax -= fwdX;
+        az -= fwdZ;
+    }
+    if (isADown) {
+        ax -= rightX;
+        az -= rightZ;
+    }
+    if (isDDown) {
+        ax += rightX;
+        az += rightZ;
+    }
+    
+    // Normalize if moving diagonally to keep consistent speed
+    float len = sqrt(ax*ax + az*az);
+    if (len > 0.01f) {
+        ax /= len;
+        az /= len;
+        ax *= acceleration;
+        az *= acceleration;
+    }
+    
+    physObj->acceleration.x = ax;
+    physObj->acceleration.z = az;
 }
 
 gboolean InputManager::on_scroll(GtkWidget* widget, GdkEventScroll* event) {

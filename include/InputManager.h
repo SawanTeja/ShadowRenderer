@@ -38,6 +38,14 @@ private:
     // View rotation state
     double prevMouseX;
     double prevMouseY;
+    
+    // Key States for smooth movement
+    bool isWDown = false;
+    bool isADown = false;
+    bool isSDown = false;
+    bool isDDown = false;
+    
+    void updatePhysicsAcceleration();
 };
 
 #endif // INPUTMANAGER_H
