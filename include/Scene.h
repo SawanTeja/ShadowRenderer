@@ -2,7 +2,6 @@
 #define SCENE_H
 
 #include <vector>
-#include <vector>
 #include <GL/gl.h>
 #include "MathUtils.h"
 
@@ -23,9 +22,11 @@ public:
 
     void addCube(float r, float g, float b);
     void addCubeAt(float x, float z, float r, float g, float b);
-    void addLight();
-    void addLightAt(float x, float z, float r, float g, float b);
-    void setLightPosition(float x, float y);
+
+    // Single light API
+    void setLightWorldPos(float x, float y, float z);
+    Vector3 getLightPosition() const;
+    bool hasLight() const;
 
 private:
     struct Light {
@@ -34,16 +35,13 @@ private:
     };
 
     std::vector<Cube> cubes;
-    std::vector<Light> lights;
-    // Vector3 lightPos; // Replaced by lights vector
+    Light light;
+    bool lightActive;
     float rotation;
     
     void drawCube(const Cube& cube);
     void drawFloor();
     void drawWall();
-    void drawShadows();
-    
-    // Display list IDs if needed, or just immediate mode for simplicity
 };
 
 #endif // SCENE_H

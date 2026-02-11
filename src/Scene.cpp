@@ -3,7 +3,10 @@
 #include <cmath>
 #include <iostream>
 
-Scene::Scene() : rotation(0.0f) {
+Scene::Scene() : rotation(0.0f), lightActive(false) {
+    // Default light color: warm white
+    light.color = Vector3(1.0f, 0.9f, 0.7f);
+    light.position = Vector3(0.0f, 5.0f, 0.0f);
 }
 
 Scene::~Scene() {
@@ -27,11 +30,8 @@ void Scene::init() {
     // Add a default cube - Blue
     addCube(0.0f, 0.0f, 1.0f);
     
-    // Add default light
-    addLight();
-    if (!lights.empty()) {
-        lights[0].position = Vector3(0.0f, 5.0f, 0.0f);
-    }
+    // Activate the default light
+    lightActive = true;
 }
 
 void Scene::resize(int width, int height) {
@@ -53,14 +53,13 @@ void Scene::render() {
               0.0f, 0.0f, 0.0f,
               0.0f, 1.0f, 0.0f);
               
-    // Enabled lights
-    // OpenGL fixed pipeline supports GL_LIGHT0 to GL_LIGHT7
-    for (size_t i = 0; i < lights.size() && i < 8; ++i) {
-        glEnable(GL_LIGHT0 + i);
-        GLfloat light_position[] = { lights[i].position.x, lights[i].position.y, lights[i].position.z, 1.0f };
-        GLfloat light_diffuse[] = { lights[i].color.x, lights[i].color.y, lights[i].color.z, 1.0f };
-        glLightfv(GL_LIGHT0 + i, GL_POSITION, light_position);
-        glLightfv(GL_LIGHT0 + i, GL_DIFFUSE, light_diffuse);
+    // Set up the single light
+    if (lightActive) {
+        glEnable(GL_LIGHT0);
+        GLfloat light_position[] = { light.position.x, light.position.y, light.position.z, 1.0f };
+        GLfloat light_diffuse[] = { light.color.x, light.color.y, light.color.z, 1.0f };
+        glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
     }
     
     // Draw solid objects
@@ -71,14 +70,13 @@ void Scene::render() {
         drawCube(cube);
     }
     
-    // Draw shadows for EACH light
-    glDisable(GL_LIGHTING);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
-    for (const auto& light : lights) {
-        // Shadow color based on light intensity/count? just constant for now
-        glColor4f(0.0f, 0.0f, 0.0f, 0.3f); // Semi-transparent black, lighter for multi-shadows
+    // Draw shadow from the single light
+    if (lightActive) {
+        glDisable(GL_LIGHTING);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        
+        glColor4f(0.0f, 0.0f, 0.0f, 0.3f);
         
         glPushMatrix();
         Matrix4 shadowMat = Matrix4::shadow(light.position, 0.01f);
@@ -89,7 +87,6 @@ void Scene::render() {
              glTranslatef(cube.position.x, cube.position.y, cube.position.z);
              float s = cube.size;
              
-             // Draw Cube Geometry (simplified)
              glBegin(GL_QUADS);
                 // Front
                 glVertex3f(-s, -s,  s); glVertex3f( s, -s,  s); glVertex3f( s,  s,  s); glVertex3f(-s,  s,  s);
@@ -107,20 +104,17 @@ void Scene::render() {
              glPopMatrix();
         }
         glPopMatrix();
-    }
-    
-    glDisable(GL_BLEND);
-    glEnable(GL_LIGHTING);
-    
-    // Draw Light Sources
-    for (const auto& light : lights) {
+        
+        glDisable(GL_BLEND);
+        glEnable(GL_LIGHTING);
+        
+        // Draw light source indicator (small yellow cube)
         glPushMatrix();
         glTranslatef(light.position.x, light.position.y, light.position.z);
         glDisable(GL_LIGHTING);
         glColor3f(light.color.x, light.color.y, light.color.z); 
         
-        // Draw small cube as light
-        float ls = 0.1f;
+        float ls = 0.15f;
         glBegin(GL_QUADS);
             // Front
             glVertex3f(-ls, -ls, ls); glVertex3f(ls, -ls, ls); glVertex3f(ls, ls, ls); glVertex3f(-ls, ls, ls);
@@ -142,10 +136,9 @@ void Scene::render() {
 
 void Scene::addCube(float r, float g, float b) {
     Cube c;
-    c.position.x = (rand() % 100) / 10.0f - 5.0f; // -5 to 5
-    // c.position.y = (rand() % 100) / 10.0f - 2.0f; 
-    c.position.y = 0.5f; // Size is 0.5, so radius is 0.5. To sit on floor(0), y needs to be 0.5
-    c.position.z = (rand() % 100) / 10.0f - 5.0f; // -5 to 5
+    c.position.x = (rand() % 100) / 10.0f - 5.0f;
+    c.position.y = 0.5f;
+    c.position.z = (rand() % 100) / 10.0f - 5.0f;
     
     c.color.x = r;
     c.color.y = g;
@@ -159,7 +152,7 @@ void Scene::addCube(float r, float g, float b) {
 void Scene::addCubeAt(float x, float z, float r, float g, float b) {
     Cube c;
     c.position.x = x;
-    c.position.y = 0.5f; // Sit on floor
+    c.position.y = 0.5f;
     c.position.z = z;
     
     c.color.x = r;
@@ -171,46 +164,19 @@ void Scene::addCubeAt(float x, float z, float r, float g, float b) {
     cubes.push_back(c);
 }
 
-void Scene::addLight() {
-    if (lights.size() >= 8) return; // OpenGL limit
-    
-    Light l;
-    l.position.x = (rand() % 100) / 10.0f - 5.0f;
-    l.position.y = (rand() % 50) / 10.0f + 2.0f; // 2.0 to 7.0 height
-    l.position.z = (rand() % 100) / 10.0f - 5.0f;
-    
-    // Random color or just warm white
-    l.color.x = 1.0f;
-    l.color.y = (rand() % 50 + 50) / 100.0f; // 0.5 - 1.0 (Orange-ish to White)
-    l.color.z = 0.0f;
-    
-    lights.push_back(l);
+void Scene::setLightWorldPos(float x, float y, float z) {
+    light.position.x = x;
+    light.position.y = y;
+    light.position.z = z;
+    lightActive = true;
 }
 
-void Scene::addLightAt(float x, float z, float r, float g, float b) {
-    if (lights.size() >= 8) return; 
-    
-    Light l;
-    l.position.x = x;
-    l.position.y = 3.0f; // Height matched to ray-cast plane so light appears at click position
-    l.position.z = z;
-    
-    l.color.x = r;
-    l.color.y = g;
-    l.color.z = b;
-    
-    lights.push_back(l);
+Vector3 Scene::getLightPosition() const {
+    return light.position;
 }
 
-void Scene::setLightPosition(float x, float y) {
-    if (lights.empty()) return;
-    
-    // Modify the LAST light added
-    Light& l = lights.back();
-    
-    l.position.x = x * 10.0f - 5.0f;
-    l.position.y = (1.0f - y) * 10.0f;
-    if (l.position.y < 1.0f) l.position.y = 1.0f;
+bool Scene::hasLight() const {
+    return lightActive;
 }
 
 void Scene::drawCube(const Cube& cube) {

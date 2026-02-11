@@ -14,16 +14,18 @@ public:
 private:
     GtkWidget* window;
     GtkWidget* button;
-    GtkWidget* add_light_button;
     GtkWidget* mode_combo;
     GtkWidget* color_button;
     GtkWidget* box;
     GtkWidget* gl_area;
 
     Scene* scene;
+    
+    // Drag state for light
+    bool draggingLight;
+    float lightPlaneY;  // The Y-plane the light lives on (for consistent dragging)
 
     static void on_button_clicked(GtkWidget* widget, gpointer data);
-    static void on_add_light_clicked(GtkWidget* widget, gpointer data);
     
     // GL Callbacks
     static void on_realize(GtkGLArea* area, gpointer data);
@@ -33,6 +35,7 @@ private:
     // Mouse interaction
     static gboolean on_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer data);
     static gboolean on_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data);
+    static gboolean on_button_release(GtkWidget* widget, GdkEventButton* event, gpointer data);
 };
 
 #endif // MAINWINDOW_H
