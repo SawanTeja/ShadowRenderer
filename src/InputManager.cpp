@@ -67,7 +67,7 @@ void InputManager::updatePhysicsAcceleration() {
     PhysicsObject* physObj = scene->getPhysicsObject(scene->getSelected());
     if (!physObj) return;
 
-    float acceleration = 15.0f; // Tuned for better response
+    float acceleration = 20.0f; // Increased to 20.0 for aggressive acceleration
 
     // Get Camera Yaw
     float yaw = scene->getCamera()->getYaw();

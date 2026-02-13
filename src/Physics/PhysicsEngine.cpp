@@ -37,24 +37,37 @@ void PhysicsEngine::update(float dt) {
         obj->velocity.y += GRAVITY * dt;
 
         // Apply user acceleration (WASD input)
+        // Apply user acceleration (WASD input)
         obj->velocity.x += obj->acceleration.x * dt;
-        obj->velocity.y += obj->acceleration.y * dt;
         obj->velocity.z += obj->acceleration.z * dt;
-
-        // Apply horizontal friction (only XZ, not Y — gravity handles vertical)
-        if (obj->friction > 0.0f) {
-            float damping = 1.0f - (obj->friction * dt);
-            if (damping < 0.0f) damping = 0.0f;
-            
-            obj->velocity.x *= damping;
-            obj->velocity.z *= damping;
-            
-            // Stop horizontal movement if very slow
+        
+        // Decouple friction: only apply when NOT accelerating, or apply different drag
+        bool isAccelerating = (obj->acceleration.x != 0.0f || obj->acceleration.z != 0.0f);
+        const float MAX_SPEED = 50.0f; // Significantly increased for very fast movement
+        
+        if (isAccelerating) {
+            // Cap horizontal speed
             float horizSpeed = sqrt(obj->velocity.x * obj->velocity.x + obj->velocity.z * obj->velocity.z);
-            float horizAccel = sqrt(obj->acceleration.x * obj->acceleration.x + obj->acceleration.z * obj->acceleration.z);
-            if (horizSpeed < 0.01f && horizAccel < 0.01f) {
-                 obj->velocity.x = 0.0f;
-                 obj->velocity.z = 0.0f;
+            if (horizSpeed > MAX_SPEED) {
+                float scale = MAX_SPEED / horizSpeed;
+                obj->velocity.x *= scale;
+                obj->velocity.z *= scale;
+            }
+        } else {
+            // Apply friction only when not accelerating (stopping)
+            if (obj->friction > 0.0f) {
+                float damping = 1.0f - (obj->friction * dt);
+                if (damping < 0.0f) damping = 0.0f;
+                
+                obj->velocity.x *= damping;
+                obj->velocity.z *= damping;
+                
+                // Stop horizontal movement if very slow
+                float horizSpeed = sqrt(obj->velocity.x * obj->velocity.x + obj->velocity.z * obj->velocity.z);
+                if (horizSpeed < 0.01f) {
+                     obj->velocity.x = 0.0f;
+                     obj->velocity.z = 0.0f;
+                }
             }
         }
 
