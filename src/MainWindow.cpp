@@ -3,18 +3,44 @@
 #include <iostream>
 #include <cstring>
 
-MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), inputManager(nullptr) {
+MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), inputManager(nullptr), is_simulation_running(false) {
     window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "Basic 3D");
     gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
 
+    // Create a stack to hold different screens (Menu, Simulation)
+    stack = gtk_stack_new();
+    gtk_container_add(GTK_CONTAINER(window), stack);
+
+    // --- 1. Main Menu View ---
+    menu_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+    gtk_widget_set_valign(menu_vbox, GTK_ALIGN_CENTER);
+    gtk_widget_set_halign(menu_vbox, GTK_ALIGN_CENTER);
+
+    GtkWidget* title_label = gtk_label_new("<span size='xx-large' weight='bold'>Basic 3D Simulator</span>");
+    gtk_label_set_use_markup(GTK_LABEL(title_label), TRUE);
+    gtk_box_pack_start(GTK_BOX(menu_vbox), title_label, FALSE, FALSE, 20);
+
+    start_button = gtk_button_new_with_label("Start");
+    gtk_widget_set_size_request(start_button, 200, 50);
+    g_signal_connect(start_button, "clicked", G_CALLBACK(on_start_clicked), this);
+    gtk_box_pack_start(GTK_BOX(menu_vbox), start_button, FALSE, FALSE, 0);
+
+    settings_button = gtk_button_new_with_label("Settings");
+    gtk_widget_set_size_request(settings_button, 200, 50);
+    g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings_clicked), this);
+    gtk_box_pack_start(GTK_BOX(menu_vbox), settings_button, FALSE, FALSE, 0);
+
+    gtk_stack_add_named(GTK_STACK(stack), menu_vbox, "menu");
+
+    // --- 2. Simulation View ---
     // Create a box to hold controls and GL area
-    box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_container_add(GTK_CONTAINER(window), box);
+    sim_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_stack_add_named(GTK_STACK(stack), sim_vbox, "simulation");
 
     // Control Box
     GtkWidget* controlBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(box), controlBox, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(sim_vbox), controlBox, FALSE, FALSE, 10);
 
     // Create Color Button
     color_button = gtk_color_button_new();
@@ -58,7 +84,7 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), inputManager(n
     gtk_gl_area_set_has_depth_buffer(GTK_GL_AREA(gl_area), TRUE);
     gtk_gl_area_set_has_stencil_buffer(GTK_GL_AREA(gl_area), TRUE);
     
-    gtk_box_pack_start(GTK_BOX(box), gl_area, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(sim_vbox), gl_area, TRUE, TRUE, 0);
     
     // Connect GL signals
     g_signal_connect(gl_area, "realize", G_CALLBACK(on_realize), this);
@@ -79,6 +105,9 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), inputManager(n
     g_signal_connect(window, "key-press-event", G_CALLBACK(InputManager::on_key_press_callback), inputManager); // Window handles keys
     g_signal_connect(window, "key-release-event", G_CALLBACK(InputManager::on_key_release_callback), inputManager);
     
+    // Show the menu by default
+    gtk_stack_set_visible_child_name(GTK_STACK(stack), "menu");
+
     // Game Loop (approx 60 FPS)
     g_timeout_add(16, (GSourceFunc)on_tick, this);
 }
@@ -123,6 +152,17 @@ Vector3 MainWindow::getSelectedColor() const {
     return Vector3(color.red, color.green, color.blue);
 }
 
+void MainWindow::on_start_clicked(GtkWidget* widget, gpointer data) {
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    mw->is_simulation_running = true;
+    gtk_stack_set_visible_child_name(GTK_STACK(mw->stack), "simulation");
+}
+
+void MainWindow::on_settings_clicked(GtkWidget* widget, gpointer data) {
+    // Placeholder for settings
+    std::cout << "Settings clicked!" << std::endl;
+}
+
 void MainWindow::on_button_clicked(GtkWidget* widget, gpointer data) {
     MainWindow* mw = static_cast<MainWindow*>(data);
     
@@ -164,9 +204,11 @@ gboolean MainWindow::on_resize(GtkGLArea* area, gint width, gint height, gpointe
 
 gboolean MainWindow::on_tick(gpointer data) {
     MainWindow* mw = static_cast<MainWindow*>(data);
-    // DT is fixed 0.016f for now, or calculate real dt
-    mw->scene->update(0.016f);
-    gtk_widget_queue_draw(mw->gl_area);
+    if (mw->is_simulation_running) {
+        // DT is fixed 0.016f for now, or calculate real dt
+        mw->scene->update(0.016f);
+        gtk_widget_queue_draw(mw->gl_area);
+    }
     return TRUE; // Continue calling
 }
 
