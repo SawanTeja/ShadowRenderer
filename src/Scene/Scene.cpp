@@ -351,7 +351,8 @@ float Cone::intersect(const float origin[3], const float dir[3]) const {
 // ==========================================
 
 Scene::Scene() : lightActive(false), selectedIndex(-1), floorTextureId(0), wallTextureId(0),
-                 camera(new Camera()), terrain(nullptr), shadowSystem(nullptr) {
+                 camera(new Camera()), terrain(nullptr), shadowSystem(nullptr),
+                 showTrees(true), treeCount(50) {
     // Default light
     light.color = Vector3(1.0f, 0.9f, 0.7f);
     light.position = Vector3(0.0f, 5.0f, 0.0f);
@@ -411,7 +412,7 @@ void Scene::init() {
 
     // Add some default shapes
     addShape(SHAPE_CUBE, 0.0f, 0.0f, 1.0f);
-    generateTrees(50);
+    generateTrees(treeCount);
     lightActive = true;
 }
 
@@ -470,15 +471,19 @@ void Scene::render() {
     }
     
     // Draw trees
-    for (const auto& t : trees) {
-        drawTree(t);
+    if (showTrees) {
+        for (const auto& t : trees) {
+            drawTree(t);
+        }
     }
 
     // Shadows
     if (lightActive && shadowSystem) {
         shadowSystem->renderShadows(light.position, [this]() {
             for (auto shape : shapes) shape->draw();
-            for (const auto& t : trees) drawTree(t);
+            if (showTrees) {
+                for (const auto& t : trees) drawTree(t);
+            }
         });
     }
     
@@ -752,7 +757,15 @@ void Scene::drawLightWireframe(const Vector3& pos, float size) {
 }
 
 void Scene::generateTrees(int count) {
+    // Remove old physics objects
+    for (const auto& t : trees) {
+        if (t.physObj) {
+            physicsEngine->removeObject(t.physObj);
+        }
+    }
     trees.clear();
+    treeCount = count;
+    
     for (int i = 0; i < count; i++) {
         Tree t;
         // Random position between -40 and 40
@@ -831,5 +844,25 @@ void Scene::drawTree(const Tree& tree) {
     }
     glEnd();
     
+    glEnd();
+    
     glPopMatrix();
+}
+
+void Scene::setTreesVisible(bool visible) {
+    showTrees = visible;
+}
+
+bool Scene::getTreesVisible() const {
+    return showTrees;
+}
+
+void Scene::setTreeCount(int count) {
+    if (count != treeCount) {
+        generateTrees(count);
+    }
+}
+
+int Scene::getTreeCount() const {
+    return treeCount;
 }

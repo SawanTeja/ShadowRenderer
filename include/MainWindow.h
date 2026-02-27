@@ -28,6 +28,12 @@ private:
     GtkWidget* start_button;
     GtkWidget* settings_button;
     
+    // Settings VBox and elements
+    GtkWidget* settings_vbox;
+    GtkWidget* back_button;
+    GtkWidget* hide_trees_check;
+    GtkWidget* tree_count_spin;
+    
     // Simulation Box
     GtkWidget* sim_vbox;
     GtkWidget* button;
@@ -44,6 +50,9 @@ private:
 
     static void on_start_clicked(GtkWidget* widget, gpointer data);
     static void on_settings_clicked(GtkWidget* widget, gpointer data);
+    static void on_back_clicked(GtkWidget* widget, gpointer data);
+    static void on_hide_trees_toggled(GtkToggleButton* widget, gpointer data);
+    static void on_tree_count_changed(GtkSpinButton* widget, gpointer data);
     static void on_button_clicked(GtkWidget* widget, gpointer data);
     
     // GL Callbacks

@@ -160,6 +160,15 @@ private:
     std::vector<Tree> trees;
     void generateTrees(int count);
     void drawTree(const Tree& tree);
+    
+    bool showTrees;
+    int treeCount;
+
+public:
+    void setTreesVisible(bool visible);
+    bool getTreesVisible() const;
+    void setTreeCount(int count);
+    int getTreeCount() const;
 };
 
 #endif // SCENE_H

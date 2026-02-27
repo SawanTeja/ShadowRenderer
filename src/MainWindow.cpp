@@ -33,7 +33,42 @@ MainWindow::MainWindow(GtkApplication* app) : scene(new Scene()), inputManager(n
 
     gtk_stack_add_named(GTK_STACK(stack), menu_vbox, "menu");
 
-    // --- 2. Simulation View ---
+    // --- 2. Settings View ---
+    settings_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+    gtk_widget_set_valign(settings_vbox, GTK_ALIGN_CENTER);
+    gtk_widget_set_halign(settings_vbox, GTK_ALIGN_CENTER);
+
+    GtkWidget* settings_title = gtk_label_new("<span size='xx-large' weight='bold'>Settings</span>");
+    gtk_label_set_use_markup(GTK_LABEL(settings_title), TRUE);
+    gtk_box_pack_start(GTK_BOX(settings_vbox), settings_title, FALSE, FALSE, 20);
+
+    // Hide Trees Checkbox
+    hide_trees_check = gtk_check_button_new_with_label("Hide Trees");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hide_trees_check), FALSE); // Default shown
+    g_signal_connect(hide_trees_check, "toggled", G_CALLBACK(on_hide_trees_toggled), this);
+    gtk_box_pack_start(GTK_BOX(settings_vbox), hide_trees_check, FALSE, FALSE, 0);
+
+    // Number of Trees SpinButton
+    GtkWidget* tree_count_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* tree_count_label = gtk_label_new("Number of Trees: ");
+    
+    // Create adjustment: value, lower, upper, step_increment, page_increment, page_size
+    GtkAdjustment* tree_count_adj = gtk_adjustment_new(50, 0, 1000, 10, 50, 0);
+    tree_count_spin = gtk_spin_button_new(tree_count_adj, 1, 0);
+    g_signal_connect(tree_count_spin, "value-changed", G_CALLBACK(on_tree_count_changed), this);
+    
+    gtk_box_pack_start(GTK_BOX(tree_count_box), tree_count_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(tree_count_box), tree_count_spin, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(settings_vbox), tree_count_box, FALSE, FALSE, 10);
+
+    back_button = gtk_button_new_with_label("Back");
+    gtk_widget_set_size_request(back_button, 200, 50);
+    g_signal_connect(back_button, "clicked", G_CALLBACK(on_back_clicked), this);
+    gtk_box_pack_start(GTK_BOX(settings_vbox), back_button, FALSE, FALSE, 20);
+
+    gtk_stack_add_named(GTK_STACK(stack), settings_vbox, "settings");
+
+    // --- 3. Simulation View ---
     // Create a box to hold controls and GL area
     sim_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_stack_add_named(GTK_STACK(stack), sim_vbox, "simulation");
@@ -159,8 +194,25 @@ void MainWindow::on_start_clicked(GtkWidget* widget, gpointer data) {
 }
 
 void MainWindow::on_settings_clicked(GtkWidget* widget, gpointer data) {
-    // Placeholder for settings
-    std::cout << "Settings clicked!" << std::endl;
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    gtk_stack_set_visible_child_name(GTK_STACK(mw->stack), "settings");
+}
+
+void MainWindow::on_back_clicked(GtkWidget* widget, gpointer data) {
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    gtk_stack_set_visible_child_name(GTK_STACK(mw->stack), "menu");
+}
+
+void MainWindow::on_hide_trees_toggled(GtkToggleButton* widget, gpointer data) {
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    bool hidden = gtk_toggle_button_get_active(widget);
+    mw->scene->setTreesVisible(!hidden);
+}
+
+void MainWindow::on_tree_count_changed(GtkSpinButton* widget, gpointer data) {
+    MainWindow* mw = static_cast<MainWindow*>(data);
+    int count = gtk_spin_button_get_value_as_int(widget);
+    mw->scene->setTreeCount(count);
 }
 
 void MainWindow::on_button_clicked(GtkWidget* widget, gpointer data) {
